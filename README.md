@@ -1,10 +1,10 @@
 # Quota
 
-Windows 11 x64 작업표시줄에서 Claude Code와 Codex의 계정별 구독 할당량을 확인하는 앱입니다. 40 DIP 게이지의 각 고리는 사용한 만큼 12시부터 시계 방향으로 차오릅니다. Claude는 바깥부터 보라색 주간 7칸, 주황색 Fable 주간 7칸, 청록색 5시간 5칸으로 읽습니다. 세 고리는 4 DIP 두께로 맞닿아 있고, 빨간 바늘의 폭은 2 DIP입니다. Fable 한도가 없는 계정에는 주간과 5시간 고리가 표시됩니다.
+Windows 11 x64 작업표시줄에서 Claude Code와 Codex의 계정별 구독 할당량을 확인하는 앱입니다. 40 DIP 게이지의 각 고리는 사용한 만큼 12시부터 시계 방향으로 차오릅니다. 바깥쪽 주간 고리는 4 DIP 두께에 7칸입니다. Claude가 Fable도 제공하면 이 폭을 보라색 주간과 주황색 Fable이 2 DIP씩 나눠 씁니다. 안쪽 청록색 5시간 고리는 두 서비스 모두 4 DIP 두께에 5칸이며, 빨간 바늘의 폭은 2 DIP입니다.
 
 ## 게이지 읽기
 
-![Windows 11 작업표시줄에서 테스트 계정의 사용량 고리와 빨간 리셋 바늘을 표시한 실제 캡처](taskbar-clock-native.png)
+![Windows 11 작업표시줄에서 Claude와 Codex를 나란히 표시한 실제 캡처. Claude의 보라색·주황색 주간 고리를 합친 폭은 Codex의 보라색 주간 고리와 같습니다.](taskbar-clock-native.png)
 
 빨간 바늘은 한도 주기가 시작되면 12시에서 출발해 시계 방향으로 움직입니다. 주간 바늘 하나가 보라색과 주황색 고리의 같은 눈금을 가로지르며 하루에 한 칸 전진합니다. 청록색 고리의 바늘은 한 시간에 한 칸 전진합니다. 바늘에서 12시까지 시계 방향으로 남은 눈금이 리셋까지 남은 시간입니다. 리셋 시각을 지나면 다음 조회까지 12시에 끊어진 빨간 선이 표시됩니다.
 
@@ -16,7 +16,9 @@ Windows 11 x64 작업표시줄에서 Claude Code와 Codex의 계정별 구독 �
 
 ## 설치와 계정 연결
 
-1. `dist/Quota-1.1.3-windows-x64-setup.exe`를 실행합니다. 설치는 현재 Windows 사용자에게 적용됩니다. WebView2가 없는 PC는 최초 설치 시 인터넷 연결이 필요합니다. 이 빌드는 미서명입니다.
+**1.1.4 설치 상태** — Windows Defender가 설치 검증 중 `quota.exe`를 `Trojan:Win32/Bearfoos.A!ml`로 탐지해 격리했습니다. 탐지 원인 확인과 설치 재검증이 필요합니다. 새 게이지는 로컬에서 [시안](index.html)을 열어 볼 수 있습니다.
+
+1. 설치가 검증된 버전의 Windows x64 설치 파일을 실행합니다. 설치는 현재 Windows 사용자에게 적용됩니다. WebView2가 없는 PC는 최초 설치 시 인터넷 연결이 필요합니다.
 2. 시작 메뉴에서 **Quota**를 열고 Claude 또는 GPT를 선택합니다. 제안된 폴더를 확인하거나 **폴더 선택**으로 Windows에서 이미 로그인한 CLI 프로필을 지정합니다. Claude는 `.credentials.json`, Codex는 구독 OAuth 로그인이 들어 있는 `auth.json`을 사용하는 프로필을 지원합니다.
 3. **이 폴더로 연결**을 누릅니다. 폴더를 한 계정 전용으로 사용해 왔다면 전용 폴더 확인란을 선택할 수 있습니다. 확인하지 않으면 계정 ID가 없는 과거 기록은 집계에서 제외됩니다.
    두 번째 GPT를 추가할 때는 **계정 설정 → 계정 추가 → GPT · Codex**에서 별칭을 입력하고 **GPT 로그인 링크 받기 → 로그인 링크 복사**를 누릅니다. 이 PC에서 추가할 계정이 로그인된 브라우저 프로필을 열고 주소창에 링크를 붙여넣으세요. 인증이 끝나면 앱이 해당 계정을 연결합니다. 기다리는 중에 **로그인 취소**를 누르면 링크를 폐기하고 다시 시작할 수 있습니다. Claude도 같은 방법으로 추가할 수 있습니다. 해당 CLI가 이 PC에 설치되어 있어야 합니다.
@@ -37,7 +39,7 @@ Windows x64, Rust MSVC 도구 체인, Visual Studio C++ Build Tools와 Windows S
 ```powershell
 cargo test --locked
 powershell -NoProfile -ExecutionPolicy Bypass -File .\packaging\build.ps1
-Get-FileHash .\dist\Quota-1.1.3-windows-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\dist\Quota-1.1.4-windows-x64-setup.exe -Algorithm SHA256
 ```
 
 빌드 스크립트는 잠금 파일로 Rust 릴리스를 빌드하고, 해시로 검증한 NSIS와 Microsoft 서명을 확인한 WebView2 부트스트래퍼로 `dist`의 설치본과 체크섬 파일을 생성합니다. 최초 빌드에는 네트워크 연결이 필요합니다.

@@ -1219,26 +1219,39 @@ impl<'a> Gauge<'a> {
     }
 
     fn weekly_inner_edge(&self) -> f32 {
-        let bands = u8::from(self.week.is_some()) + u8::from(self.fable.is_some());
-        OUTER_RADIUS - f32::from(bands) * RING_WIDTH
+        if self.week.is_some() || self.fable.is_some() {
+            OUTER_RADIUS - RING_WIDTH
+        } else {
+            OUTER_RADIUS
+        }
     }
 
-    fn rings(&self) -> impl Iterator<Item = (Ring, &Limit, f32)> {
+    fn rings(&self) -> impl Iterator<Item = (Ring, &Limit, (f32, f32))> {
+        let weekly_width = if self.week.is_some() && self.fable.is_some() {
+            RING_WIDTH / 2.
+        } else {
+            RING_WIDTH
+        };
+        let inner = self.weekly_inner_edge();
         [
-            (Ring::Week, self.week),
-            (Ring::Fable, self.fable),
-            (Ring::Short, self.short),
+            (
+                Ring::Week,
+                self.week,
+                (OUTER_RADIUS - weekly_width / 2., weekly_width),
+            ),
+            (
+                Ring::Fable,
+                self.fable,
+                (inner + weekly_width / 2., weekly_width),
+            ),
+            (
+                Ring::Short,
+                self.short,
+                (inner - RING_WIDTH / 2., RING_WIDTH),
+            ),
         ]
         .into_iter()
-        .filter_map(|(ring, limit)| limit.map(|limit| (ring, limit)))
-        .enumerate()
-        .map(|(index, (ring, limit))| {
-            (
-                ring,
-                limit,
-                OUTER_RADIUS - (index as f32 + 0.5) * RING_WIDTH,
-            )
-        })
+        .filter_map(|(ring, limit, band)| limit.map(|limit| (ring, limit, band)))
     }
 }
 
@@ -1439,7 +1452,7 @@ impl Renderer {
                     );
                     let gauge = Gauge::new(tile);
                     let known = gauge.has_quota();
-                    for (ring, limit, radius) in gauge.rings() {
+                    for (ring, limit, band) in gauge.rings() {
                         let (active, track) = match ring {
                             Ring::Week => (&palette.week, &palette.week_track),
                             Ring::Fable => (&palette.fable, &palette.fable_track),
@@ -1447,24 +1460,10 @@ impl Renderer {
                         };
                         for arc in arcs(ring.divisions(), limit.remaining) {
                             brush.SetColor(track);
-                            self.arc(
-                                target,
-                                &brush,
-                                center,
-                                (radius, RING_WIDTH),
-                                arc.start,
-                                arc.span,
-                            )?;
+                            self.arc(target, &brush, center, band, arc.start, arc.span)?;
                             if arc.filled > 0. {
                                 brush.SetColor(active);
-                                self.arc(
-                                    target,
-                                    &brush,
-                                    center,
-                                    (radius, RING_WIDTH),
-                                    arc.start,
-                                    arc.filled,
-                                )?;
+                                self.arc(target, &brush, center, band, arc.start, arc.filled)?;
                             }
                         }
                     }
@@ -1479,11 +1478,7 @@ impl Renderer {
                             TAU,
                         )?;
                     }
-                    let logo_radius = if gauge.rings().count() == 3 {
-                        27. / 4.
-                    } else {
-                        33. / 4.
-                    };
+                    let logo_radius = 33. / 4.;
                     let logo_bounds = draw_rect(
                         center.0 - logo_radius,
                         center.1 - logo_radius,
@@ -2095,14 +2090,18 @@ mod tests {
         let bands = |tile: &Tile| {
             Gauge::new(tile)
                 .rings()
-                .map(|(ring, _, radius)| (ring, radius))
+                .map(|(ring, _, band)| (ring, band))
                 .collect::<Vec<_>>()
         };
         assert_eq!(
             bands(tile),
-            [(Ring::Week, 17.5), (Ring::Fable, 13.5), (Ring::Short, 9.5)]
+            [
+                (Ring::Week, (18.5, 2.)),
+                (Ring::Fable, (16.5, 2.)),
+                (Ring::Short, (13.5, 4.))
+            ]
         );
-        assert_eq!(Gauge::new(tile).weekly_inner_edge(), 11.5);
+        assert_eq!(Gauge::new(tile).weekly_inner_edge(), 15.5);
         let angles = |ring: Ring| {
             arcs(ring.divisions(), 50.)
                 .map(|arc| (arc.start, arc.span))
@@ -2111,13 +2110,19 @@ mod tests {
         assert_eq!(angles(Ring::Week), angles(Ring::Fable));
 
         tile.fable = None;
-        assert_eq!(bands(tile), [(Ring::Week, 17.5), (Ring::Short, 13.5)]);
+        assert_eq!(
+            bands(tile),
+            [(Ring::Week, (17.5, 4.)), (Ring::Short, (13.5, 4.))]
+        );
         assert_eq!(Gauge::new(tile).weekly_inner_edge(), 15.5);
         tile.week = None;
-        assert_eq!(bands(tile), [(Ring::Short, 17.5)]);
+        assert_eq!(bands(tile), [(Ring::Short, (17.5, 4.))]);
         assert_eq!(Gauge::new(tile).weekly_inner_edge(), OUTER_RADIUS);
         tile.fable = limit(42.);
-        assert_eq!(bands(tile), [(Ring::Fable, 17.5), (Ring::Short, 13.5)]);
+        assert_eq!(
+            bands(tile),
+            [(Ring::Fable, (17.5, 4.)), (Ring::Short, (13.5, 4.))]
+        );
     }
 
     #[test]

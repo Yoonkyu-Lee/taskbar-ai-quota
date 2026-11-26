@@ -3,9 +3,9 @@
 const dialBands = { week: 7, fable: 7, short: 5 };
 const dialOuterRadius = 39, dialStroke = 8, handWidth = 4;
 
-function dialBand(key, value, index) {
+function dialBand(key, value, outer, stroke) {
   const cells = dialBands[key];
-  const radius = dialOuterRadius - (index + .5) * dialStroke;
+  const radius = outer - stroke / 2;
   const point = fraction => {
     const angle = 2 * Math.PI * fraction;
     return [40 + radius * Math.sin(angle), 40 - radius * Math.cos(angle)];
@@ -13,7 +13,7 @@ function dialBand(key, value, index) {
   const gap = 0.011;
   const paths = Array.from({ length: cells }, (_, i) => {
     const start = point(i / cells + gap / 2), end = point((i + 1) / cells - gap / 2);
-    const attrs = `d="M${start.join(" ")} A${radius} ${radius} 0 0 1 ${end.join(" ")}" pathLength="100" stroke-width="${dialStroke}"`;
+    const attrs = `d="M${start.join(" ")} A${radius} ${radius} 0 0 1 ${end.join(" ")}" pathLength="100" stroke-width="${stroke}"`;
     const fill = Math.max(0, Math.min(100, value * cells - i * 100));
     return `<path ${attrs} class="track"/>` +
       (fill > 0 ? `<path ${attrs} class="used" stroke-dasharray="${fill} 100"/>` : "");
@@ -40,14 +40,14 @@ function dialHand(key, left, outer, inner) {
 }
 
 function dialPreview(usage, logo, resets) {
-  const keys = Object.keys(dialBands).filter(key => Number.isFinite(usage[key]));
-  const size = keys.length === 3 ? 27 : 33;
-  const bands = keys.map((key, index) => dialBand(key, usage[key], index)).join("");
-  const shortIndex = keys.indexOf("short");
-  const weeklyDepth = (keys.length - Number(shortIndex >= 0)) * dialStroke;
-  const shortEdge = dialOuterRadius - shortIndex * dialStroke;
-  const hands = (weeklyDepth ? dialHand("week", resets?.week, dialOuterRadius, dialOuterRadius - weeklyDepth) : "") +
-    (shortIndex >= 0 ? dialHand("short", resets?.short, shortEdge, shortEdge - dialStroke) : "");
+  const weeklyKeys = ["week", "fable"].filter(key => Number.isFinite(usage[key]));
+  const weeklyWidth = weeklyKeys.length === 2 ? dialStroke / 2 : dialStroke;
+  const shortEdge = dialOuterRadius - weeklyKeys.length * weeklyWidth;
+  const hasShort = Number.isFinite(usage.short);
+  const bands = weeklyKeys.map((key, i) => dialBand(key, usage[key], dialOuterRadius - i * weeklyWidth, weeklyWidth)).join("") +
+    (hasShort ? dialBand("short", usage.short, shortEdge, dialStroke) : "");
+  const hands = (weeklyKeys.length ? dialHand("week", resets?.week, dialOuterRadius, shortEdge) : "") +
+    (hasShort ? dialHand("short", resets?.short, shortEdge, shortEdge - dialStroke) : "");
   return `<svg class="dial" viewBox="0 0 80 80" aria-hidden="true">${bands}` +
-    `<image class="dial-logo" href="${logo}.svg" x="${(80 - size) / 2}" y="${(80 - size) / 2}" width="${size}" height="${size}"/>${hands}</svg>`;
+    `<image class="dial-logo" href="${logo}.svg" x="23.5" y="23.5" width="33" height="33"/>${hands}</svg>`;
 }

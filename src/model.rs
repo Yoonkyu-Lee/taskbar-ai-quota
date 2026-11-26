@@ -64,9 +64,9 @@ pub struct Tile {
     pub id: i64,
     pub provider: Provider,
     pub alias: String,
-    pub week: Option<f64>,
-    pub short: Option<f64>,
-    pub fable: Option<f64>,
+    pub week: Option<Limit>,
+    pub short: Option<Limit>,
+    pub fable: Option<Limit>,
 }
 #[derive(Clone, Debug)]
 pub enum HostAction {

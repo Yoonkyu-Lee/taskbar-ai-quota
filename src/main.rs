@@ -377,9 +377,9 @@ fn run() -> Result<(), Box<dyn Error>> {
                                 id: a.id,
                                 provider: a.provider,
                                 alias: a.alias.clone(),
-                                week: s.and_then(|x| x.week.as_ref()).map(|x| x.remaining),
-                                short: s.and_then(|x| x.short.as_ref()).map(|x| x.remaining),
-                                fable: s.and_then(|x| x.fable.as_ref()).map(|x| x.remaining),
+                                week: s.and_then(|x| x.week.clone()),
+                                short: s.and_then(|x| x.short.clone()),
+                                fable: s.and_then(|x| x.fable.clone()),
                             }
                         })
                         .collect(),

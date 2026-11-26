@@ -27,7 +27,11 @@ const TRAY_MESSAGE: u32 = WM_APP + 1;
 const NIN_KEYSELECT: u32 = NIN_SELECT | 1;
 const TIMER_ID: usize = 1;
 const TRAY_ID: u32 = 1;
-const TILE_WIDTH: i32 = 36;
+const DIAL_SIZE: i32 = 40;
+const TILE_PAD: i32 = 4;
+const LABEL_GAP: i32 = 4;
+const LABEL_MAX_WIDTH: i32 = 47;
+const OVERFLOW_WIDTH: i32 = 36;
 const HEIGHT: i32 = 45;
 const GROUP_GAP: i32 = 11;
 const OVERFLOW_GAP: i32 = 5;
@@ -105,7 +109,7 @@ impl Host {
     pub fn update(&mut self, tiles: Vec<Tile>) {
         {
             let mut overlay = self.state.overlay.borrow_mut();
-            overlay.layout = Layout::new(&tiles);
+            overlay.layout = Layout::new(&tiles, |alias| overlay.renderer.alias_width(alias));
             overlay.tiles = tiles;
             overlay.hover = None;
             overlay.dirty = true;
@@ -429,12 +433,13 @@ fn dip(value: i32, dpi: u32) -> i32 {
 #[derive(Default)]
 struct Layout {
     starts: Vec<i32>,
+    widths: Vec<i32>,
     dividers: Vec<i32>,
     width: i32,
 }
 
 impl Layout {
-    fn new(tiles: &[Tile]) -> Self {
+    fn new(tiles: &[Tile], alias_width: impl Fn(&str) -> i32) -> Self {
         let mut layout = Self::default();
         for (index, tile) in tiles.iter().enumerate() {
             if index != 0 {
@@ -445,14 +450,22 @@ impl Layout {
                     layout.width += 1;
                 }
             }
+            let alias = tile.alias.as_str();
+            let label_width = if alias.is_empty() {
+                0
+            } else {
+                LABEL_GAP + alias_width(alias).clamp(0, LABEL_MAX_WIDTH)
+            };
+            let width = 2 * TILE_PAD + DIAL_SIZE + label_width;
             layout.starts.push(layout.width);
-            layout.width += TILE_WIDTH;
+            layout.widths.push(width);
+            layout.width += width;
         }
         layout
     }
 
     fn fit(&self, capacity: i32, dpi: u32) -> Option<Fit> {
-        if self.starts.is_empty() || capacity < dip(TILE_WIDTH, dpi) {
+        if self.starts.is_empty() || capacity < dip(OVERFLOW_WIDTH, dpi) {
             return None;
         }
         if dip(self.width, dpi) <= capacity {
@@ -462,28 +475,37 @@ impl Layout {
                 width: self.width,
             });
         }
-        let visible = self.starts.partition_point(|&start| {
-            dip(start + TILE_WIDTH + OVERFLOW_GAP + TILE_WIDTH, dpi) <= capacity
+        let visible = self
+            .starts
+            .iter()
+            .zip(&self.widths)
+            .take_while(|&(&start, &width)| {
+                dip(start + width + OVERFLOW_GAP + OVERFLOW_WIDTH, dpi) <= capacity
+            })
+            .count();
+        let overflow_at = visible.checked_sub(1).map_or(0, |last| {
+            self.starts[last] + self.widths[last] + OVERFLOW_GAP
         });
-        let overflow_at = visible
-            .checked_sub(1)
-            .map_or(0, |last| self.starts[last] + TILE_WIDTH + OVERFLOW_GAP);
         Some(Fit {
             visible,
             overflow_at: Some(overflow_at),
-            width: overflow_at + TILE_WIDTH,
+            width: overflow_at + OVERFLOW_WIDTH,
         })
     }
 
     fn slot_at(&self, x: i32, dpi: u32, fit: Fit) -> Option<Slot> {
-        let contains = |start| (dip(start, dpi)..dip(start + TILE_WIDTH, dpi)).contains(&x);
-        if fit.overflow_at.is_some_and(contains) {
+        let contains = |start, width| (dip(start, dpi)..dip(start + width, dpi)).contains(&x);
+        if fit
+            .overflow_at
+            .is_some_and(|start| contains(start, OVERFLOW_WIDTH))
+        {
             return Some(Slot::Overflow);
         }
         self.starts
             .get(..fit.visible)?
             .iter()
-            .position(|&start| contains(start))
+            .zip(&self.widths)
+            .position(|(&start, &width)| contains(start, width))
             .map(Slot::Account)
     }
 
@@ -931,6 +953,7 @@ struct Overlay {
     hover: Option<Slot>,
     light: bool,
     dirty: bool,
+    last_painted_at: i64,
     tray_shell: Option<usize>,
     tray_v4: bool,
 }
@@ -949,6 +972,7 @@ impl Overlay {
             hover: None,
             light: false,
             dirty: true,
+            last_painted_at: 0,
             tray_shell: None,
             tray_v4: false,
         })
@@ -1022,17 +1046,30 @@ impl Overlay {
         let light = light_theme();
         let old = self.placed;
         let moved = old != Some(placed);
+        let wall_time = chrono::Utc::now().timestamp();
         let redraw = self.dirty
             || self.hover != hover
             || self.light != light
+            || clock_needs_redraw(
+                &self.tiles[..placed.fit.visible],
+                self.last_painted_at,
+                wall_time,
+            )
             || old.is_none_or(|old| {
                 old.dpi != placed.dpi
                     || old.fit != placed.fit
                     || old.rect.bottom - old.rect.top != rect.bottom - rect.top
             });
         let positioned = if redraw {
-            self.renderer
-                .present(window, placed, &self.layout, &self.tiles, hover, light)
+            self.renderer.present(
+                window,
+                placed,
+                &self.layout,
+                &self.tiles,
+                hover,
+                light,
+                wall_time,
+            )
         } else if moved {
             unsafe {
                 SetWindowPos(
@@ -1071,6 +1108,9 @@ impl Overlay {
             return;
         }
         self.placed = Some(placed);
+        if redraw {
+            self.last_painted_at = wall_time;
+        }
         self.dirty = false;
         self.hover = hover;
         self.light = light;
@@ -1086,6 +1126,23 @@ impl Overlay {
         let placed = self.placed?;
         self.layout.click_at(point, placed, &self.tiles)
     }
+}
+
+fn clock_needs_redraw(tiles: &[Tile], painted: i64, now: i64) -> bool {
+    if now == painted {
+        return false;
+    }
+    let minute_changed = painted.div_euclid(60) != now.div_euclid(60);
+    tiles.iter().any(|tile| {
+        [&tile.week, &tile.short]
+            .into_iter()
+            .flatten()
+            .filter(|limit| limit.remaining.is_finite())
+            .filter_map(|limit| limit.resets_at)
+            .any(|deadline| {
+                (now < deadline) != (painted < deadline) || (now < deadline && minute_changed)
+            })
+    })
 }
 
 fn light_theme() -> bool {
@@ -1110,13 +1167,19 @@ fn light_theme() -> bool {
 // 64x64 alpha masks rasterized from claude.svg and openai.svg, covered by ICONS-LICENSE.txt.
 const CLAUDE_MASK: &[u8; 4096] = include_bytes!("taskbar_claude.alpha");
 const GPT_MASK: &[u8; 4096] = include_bytes!("taskbar_openai.alpha");
-const RING_WIDTH: f32 = 4.35 / 2.;
+const WEEK_RADIUS: f32 = 35. / 2.;
+const SHORT_RADIUS: f32 = 26.5 / 2.;
+const FABLE_RADIUS: f32 = 19. / 2.;
+const RING_WIDTH: f32 = 5.2 / 2.;
+const FABLE_WIDTH: f32 = 3. / 2.;
+const WEEK_SECONDS: i64 = 7 * 24 * 60 * 60;
+const SHORT_SECONDS: i64 = 5 * 60 * 60;
 
 fn has_quota(tile: &Tile) -> bool {
-    [tile.week, tile.short, tile.fable]
+    [&tile.week, &tile.short, &tile.fable]
         .into_iter()
         .flatten()
-        .any(f64::is_finite)
+        .any(|limit| limit.remaining.is_finite())
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1126,24 +1189,38 @@ struct Arc {
     filled: f32,
 }
 
-fn arcs(radius: f32, divisions: u8, remaining: f64) -> impl Iterator<Item = Arc> {
+fn arcs(divisions: u8, remaining: f64) -> impl Iterator<Item = Arc> {
     let step = TAU / f32::from(divisions);
-    let gap = if divisions == 1 { 0. } else { 1.3 / radius };
-    let percent = if remaining.is_finite() {
-        remaining.clamp(0., 100.) as f32
+    let gap = if divisions == 1 { 0. } else { 0.011 * TAU };
+    let used = if remaining.is_finite() {
+        (1. - remaining.clamp(0., 100.) / 100.) as f32
     } else {
         0.
     };
     (0..divisions).map(move |index| Arc {
         start: step * f32::from(index) + gap / 2.,
         span: step - gap,
-        filled: (step - gap)
-            * (percent * f32::from(divisions) / 100. - f32::from(index)).clamp(0., 1.),
+        filled: (step - gap) * (used * f32::from(divisions) - f32::from(index)).clamp(0., 1.),
+    })
+}
+
+#[derive(Debug, PartialEq)]
+struct ResetHand {
+    angle: f32,
+    expired: bool,
+}
+
+fn reset_hand(resets_at: Option<i64>, now: i64, window: i64) -> Option<ResetHand> {
+    let seconds = resets_at?.saturating_sub(now).clamp(0, window);
+    Some(ResetHand {
+        angle: TAU * (seconds as f32 / window as f32),
+        expired: seconds == 0,
     })
 }
 
 struct Renderer {
     factory: ID2D1Factory,
+    write: IDWriteFactory,
     target: Option<ID2D1DCRenderTarget>,
     labels: IDWriteTextFormat,
     overflow_label: IDWriteTextFormat,
@@ -1157,13 +1234,13 @@ impl Renderer {
             let labels = write.CreateTextFormat(
                 w!("Segoe UI"),
                 None,
-                DWRITE_FONT_WEIGHT_NORMAL,
+                DWRITE_FONT_WEIGHT_SEMI_BOLD,
                 DWRITE_FONT_STYLE_NORMAL,
                 DWRITE_FONT_STRETCH_NORMAL,
-                9.,
+                10.5,
                 w!("ko-KR"),
             )?;
-            labels.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
+            labels.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING)?;
             labels.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
             labels.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
             let ellipsis = write.CreateEllipsisTrimmingSign(&labels)?;
@@ -1187,11 +1264,27 @@ impl Renderer {
             overflow_label.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
             Ok(Self {
                 factory,
+                write,
                 target,
                 labels,
                 overflow_label,
             })
         }
+    }
+
+    fn alias_width(&self, alias: &str) -> i32 {
+        let text: Vec<_> = alias.encode_utf16().collect();
+        let measure = || unsafe {
+            let layout = self
+                .write
+                .CreateTextLayout(&text, &self.labels, 4096., HEIGHT as f32)?;
+            let mut metrics = DWRITE_TEXT_METRICS::default();
+            layout.GetMetrics(&mut metrics)?;
+            Ok::<_, Error>(metrics.width.ceil() as i32)
+        };
+        measure()
+            .unwrap_or(LABEL_MAX_WIDTH)
+            .clamp(0, LABEL_MAX_WIDTH)
     }
 
     fn create_target(factory: &ID2D1Factory) -> WinResult<ID2D1DCRenderTarget> {
@@ -1216,6 +1309,7 @@ impl Renderer {
         tiles: &[Tile],
         hover: Option<Slot>,
         light: bool,
+        now: i64,
     ) -> WinResult<()> {
         let Placement { rect, dpi, fit } = position;
         let width = rect.right - rect.left;
@@ -1239,8 +1333,8 @@ impl Renderer {
             target.BindDC(buffer.dc, &local)?;
             target.SetDpi(dpi as f32, dpi as f32);
             let brush = target.CreateSolidColorBrush(&palette.track, None)?;
-            let claude = logo(target, CLAUDE_MASK, palette.claude)?;
-            let gpt = logo(target, GPT_MASK, palette.gpt)?;
+            let claude = logo(target, CLAUDE_MASK, palette.logo)?;
+            let gpt = logo(target, GPT_MASK, palette.logo)?;
             target.BeginDraw();
             target.Clear(Some(&D2D1_COLOR_F::default()));
             for &divider in &layout.dividers {
@@ -1254,7 +1348,7 @@ impl Renderer {
                     &brush,
                 );
             }
-            let draw_slot = |x: f32, slot| {
+            let draw_slot = |x: f32, width: f32, slot| {
                 brush.SetColor(if hover == Some(slot) {
                     &palette.hover
                 } else {
@@ -1262,7 +1356,7 @@ impl Renderer {
                 });
                 target.FillRoundedRectangle(
                     &D2D1_ROUNDED_RECT {
-                        rect: draw_rect(x, 0., x + TILE_WIDTH as f32, HEIGHT as f32),
+                        rect: draw_rect(x, 0., x + width, HEIGHT as f32),
                         radiusX: 6.,
                         radiusY: 6.,
                     },
@@ -1272,32 +1366,66 @@ impl Renderer {
             let draw: WinResult<()> = (|| {
                 for (index, tile) in tiles.iter().take(fit.visible).enumerate() {
                     let x = layout.starts[index] as f32;
-                    draw_slot(x, Slot::Account(index));
+                    let width = layout.widths[index] as f32;
+                    draw_slot(x, width, Slot::Account(index));
 
-                    let center = (x + TILE_WIDTH as f32 / 2., 17.);
+                    let center = (
+                        x + TILE_PAD as f32 + DIAL_SIZE as f32 / 2.,
+                        HEIGHT as f32 / 2.,
+                    );
                     let known = has_quota(tile);
-                    for (limit, radius, divisions, active) in [
-                        (tile.week, 14.75, 7, palette.week),
-                        (tile.short, 11.5, 5, palette.short),
-                        (tile.fable, 8.25, 1, palette.fable),
+                    for (limit, radius, stroke, divisions, active) in [
+                        (tile.week.as_ref(), WEEK_RADIUS, RING_WIDTH, 7, palette.week),
+                        (
+                            tile.short.as_ref(),
+                            SHORT_RADIUS,
+                            RING_WIDTH,
+                            5,
+                            palette.short,
+                        ),
+                        (
+                            tile.fable.as_ref(),
+                            FABLE_RADIUS,
+                            FABLE_WIDTH,
+                            1,
+                            palette.fable,
+                        ),
                     ] {
-                        let Some(remaining) = limit.filter(|value| value.is_finite()) else {
+                        let Some(limit) = limit.filter(|limit| limit.remaining.is_finite()) else {
                             continue;
                         };
-                        for arc in arcs(radius, divisions, remaining) {
+                        for arc in arcs(divisions, limit.remaining) {
                             brush.SetColor(&palette.track);
-                            self.arc(target, &brush, center, radius, arc.start, arc.span)?;
+                            self.arc(
+                                target,
+                                &brush,
+                                center,
+                                (radius, stroke),
+                                arc.start,
+                                arc.span,
+                            )?;
                             if arc.filled > 0. {
                                 brush.SetColor(&active);
-                                self.arc(target, &brush, center, radius, arc.start, arc.filled)?;
+                                self.arc(
+                                    target,
+                                    &brush,
+                                    center,
+                                    (radius, stroke),
+                                    arc.start,
+                                    arc.filled,
+                                )?;
                             }
                         }
                     }
                     if !known {
                         brush.SetColor(&palette.track);
-                        self.arc(target, &brush, center, 14.75, 0., TAU)?;
+                        self.arc(target, &brush, center, (WEEK_RADIUS, RING_WIDTH), 0., TAU)?;
                     }
-                    let logo_radius = 32. * 0.36 / 2.;
+                    let has_fable = tile
+                        .fable
+                        .as_ref()
+                        .is_some_and(|limit| limit.remaining.is_finite());
+                    let logo_radius = if has_fable { 27. / 4. } else { 33. / 4. };
                     let logo_bounds = draw_rect(
                         center.0 - logo_radius,
                         center.1 - logo_radius,
@@ -1316,23 +1444,38 @@ impl Renderer {
                         D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
                         None,
                     );
-                    brush.SetColor(&palette.label);
-                    let alias: Vec<_> = tile.alias.encode_utf16().collect();
-                    target.DrawText(
-                        &alias,
-                        &self.labels,
-                        &draw_rect(x + 1., 33., x + 35., 44.),
-                        &brush,
-                        D2D1_DRAW_TEXT_OPTIONS_CLIP,
-                        DWRITE_MEASURING_MODE_NATURAL,
-                    );
+                    for (limit, radius, window) in [
+                        (tile.week.as_ref(), WEEK_RADIUS, WEEK_SECONDS),
+                        (tile.short.as_ref(), SHORT_RADIUS, SHORT_SECONDS),
+                    ] {
+                        let reset = limit
+                            .filter(|limit| limit.remaining.is_finite())
+                            .and_then(|limit| limit.resets_at);
+                        if let Some(hand) = reset_hand(reset, now, window) {
+                            draw_reset_hand(target, &brush, &palette, center, radius, hand);
+                        }
+                    }
+                    let label_left = x + (TILE_PAD + DIAL_SIZE + LABEL_GAP) as f32;
+                    let label_right = x + width - TILE_PAD as f32;
+                    if label_right > label_left {
+                        brush.SetColor(&palette.label);
+                        let alias: Vec<_> = tile.alias.encode_utf16().collect();
+                        target.DrawText(
+                            &alias,
+                            &self.labels,
+                            &draw_rect(label_left, 0., label_right, HEIGHT as f32),
+                            &brush,
+                            D2D1_DRAW_TEXT_OPTIONS_CLIP,
+                            DWRITE_MEASURING_MODE_NATURAL,
+                        );
+                    }
                     if tile.stale && known {
                         let mut marker = D2D1_ELLIPSE {
                             radiusX: 1.6,
                             radiusY: 1.6,
                             ..Default::default()
                         };
-                        marker.point.X = x + 32.;
+                        marker.point.X = x + (TILE_PAD + DIAL_SIZE - 2) as f32;
                         marker.point.Y = 4.;
                         brush.SetColor(&palette.fable);
                         target.FillEllipse(&marker, &brush);
@@ -1340,7 +1483,7 @@ impl Renderer {
                 }
                 if let Some(x) = fit.overflow_at {
                     let x = x as f32;
-                    draw_slot(x, Slot::Overflow);
+                    draw_slot(x, OVERFLOW_WIDTH as f32, Slot::Overflow);
                     let label: Vec<_> = format!("+{}", tiles.len() - fit.visible)
                         .encode_utf16()
                         .collect();
@@ -1348,7 +1491,7 @@ impl Renderer {
                     target.DrawText(
                         &label,
                         &self.overflow_label,
-                        &draw_rect(x, 0., x + TILE_WIDTH as f32, HEIGHT as f32),
+                        &draw_rect(x, 0., x + OVERFLOW_WIDTH as f32, HEIGHT as f32),
                         &brush,
                         D2D1_DRAW_TEXT_OPTIONS_CLIP,
                         DWRITE_MEASURING_MODE_NATURAL,
@@ -1393,10 +1536,11 @@ impl Renderer {
         target: &ID2D1DCRenderTarget,
         brush: &ID2D1SolidColorBrush,
         center: (f32, f32),
-        radius: f32,
+        ring: (f32, f32),
         start: f32,
         span: f32,
     ) -> WinResult<()> {
+        let (radius, stroke) = ring;
         let mut ellipse = D2D1_ELLIPSE {
             radiusX: radius,
             radiusY: radius,
@@ -1406,7 +1550,7 @@ impl Renderer {
         ellipse.point.Y = center.1;
         unsafe {
             if span >= TAU - f32::EPSILON {
-                target.DrawEllipse(&ellipse, brush, RING_WIDTH, None);
+                target.DrawEllipse(&ellipse, brush, stroke, None);
                 return Ok(());
             }
             let point = |angle: f32| {
@@ -1434,9 +1578,39 @@ impl Renderer {
             });
             sink.EndFigure(D2D1_FIGURE_END_OPEN);
             sink.Close()?;
-            target.DrawGeometry(&path, brush, RING_WIDTH, None);
+            target.DrawGeometry(&path, brush, stroke, None);
         }
         Ok(())
+    }
+}
+
+fn draw_reset_hand(
+    target: &ID2D1DCRenderTarget,
+    brush: &ID2D1SolidColorBrush,
+    palette: &Palette,
+    center: (f32, f32),
+    radius: f32,
+    hand: ResetHand,
+) {
+    let (sin, cos) = hand.angle.sin_cos();
+    let point = |offset| {
+        let mut point = D2D1_ELLIPSE::default().point;
+        point.X = center.0 + (radius + offset) * sin;
+        point.Y = center.1 - (radius + offset) * cos;
+        point
+    };
+    let inner = -1.8;
+    let outer = 2.;
+    unsafe {
+        brush.SetColor(&palette.hand_outline);
+        target.DrawLine(point(inner), point(outer), brush, 3., None);
+        brush.SetColor(&palette.hand);
+        if hand.expired {
+            target.DrawLine(point(inner), point(inner + 1.4), brush, 1.8, None);
+            target.DrawLine(point(outer - 1.4), point(outer), brush, 1.8, None);
+        } else {
+            target.DrawLine(point(inner), point(outer), brush, 1.8, None);
+        }
     }
 }
 
@@ -1499,23 +1673,25 @@ struct Palette {
     week: D2D1_COLOR_F,
     short: D2D1_COLOR_F,
     fable: D2D1_COLOR_F,
-    claude: u32,
-    gpt: u32,
+    hand: D2D1_COLOR_F,
+    hand_outline: D2D1_COLOR_F,
+    logo: u32,
 }
 
 impl Palette {
     fn new(light: bool) -> Self {
-        let (paper, hover, track, label, line, week, short, fable, claude, gpt) = if light {
-            (
-                0xf1f3ef, 0xe0e8e4, 0xcdd8d0, 0x52665c, 0xc1ccc6, 0x6750ac, 0x00766e, 0x9a5717,
-                0xab5332, 0x247666,
-            )
-        } else {
-            (
-                0x1a2028, 0x333d47, 0x48535d, 0xb0bbc4, 0x434c55, 0xbca8ff, 0x67d7cc, 0xffc078,
-                0xef9c79, 0x96d7ca,
-            )
-        };
+        let (paper, hover, track, label, line, week, short, fable, hand, hand_outline, logo) =
+            if light {
+                (
+                    0xf1f3ef, 0xe0e8e4, 0xcdd8d0, 0x324740, 0xc1ccc6, 0x6750ac, 0x00766e, 0x9a5717,
+                    0xbd1d29, 0xf1f3ef, 0x324740,
+                )
+            } else {
+                (
+                    0x141b1e, 0x303a3c, 0x505e62, 0xf0f3f1, 0x485355, 0xb9a5ff, 0x65ddd1, 0xffb784,
+                    0xff4848, 0x182125, 0xf2f2f2,
+                )
+            };
         Self {
             paper: color(paper, 0.92),
             hover: color(hover, 1.),
@@ -1525,8 +1701,9 @@ impl Palette {
             week: color(week, 1.),
             short: color(short, 1.),
             fable: color(fable, 1.),
-            claude,
-            gpt,
+            hand: color(hand, 1.),
+            hand_outline: color(hand_outline, 1.),
+            logo,
         }
     }
 }
@@ -1599,6 +1776,26 @@ impl Drop for Buffer {
 mod tests {
     use super::*;
 
+    #[test]
+    fn visible_reset_hands_redraw_each_minute_and_at_the_deadline() {
+        let mut sample = tiles(&[Provider::Claude]);
+        assert!(!clock_needs_redraw(&sample, 119, 120));
+        sample[0].week = Some(crate::model::Limit {
+            remaining: 62.,
+            resets_at: Some(128),
+        });
+        assert!(!clock_needs_redraw(&sample, 117, 119));
+        assert!(clock_needs_redraw(&sample, 119, 120));
+        assert!(clock_needs_redraw(&sample, 120, 128));
+        assert!(!clock_needs_redraw(&sample, 128, 180));
+        assert!(clock_needs_redraw(&sample, 128, 127));
+        sample[0].short = Some(crate::model::Limit {
+            remaining: 15.,
+            resets_at: Some(250),
+        });
+        assert!(clock_needs_redraw(&sample, 179, 180));
+    }
+
     fn rect(left: i32, top: i32, right: i32, bottom: i32) -> RECT {
         RECT {
             left,
@@ -1635,13 +1832,17 @@ mod tests {
             .collect()
     }
 
+    fn sample_layout(tiles: &[Tile]) -> Layout {
+        Layout::new(tiles, |_| 20)
+    }
+
     #[test]
     fn placement_uses_physical_tray_edge_and_scales_gap() {
-        let layout = Layout::new(&tiles(&[Provider::Claude; 4]));
+        let layout = sample_layout(&tiles(&[Provider::Claude; 4]));
         for dpi in [96, 120, 144] {
             let mut geometry = bar(dpi);
             geometry.bar.top = -dip(50, dpi);
-            let placed = placement(geometry, &[rect(-700, -40, -450, -5)], &layout).unwrap();
+            let placed = placement(geometry, &[rect(-900, -40, -700, -5)], &layout).unwrap();
             assert_eq!(placed.fit.visible, 4);
             assert_eq!(placed.rect.right, -200 - dip(4, dpi));
             assert_eq!(placed.rect.right - placed.rect.left, dip(layout.width, dpi));
@@ -1657,7 +1858,7 @@ mod tests {
     #[test]
     fn crowded_or_hidden_taskbars_fall_back_to_tray() {
         let mut geometry = bar(96);
-        let layout = Layout::new(&tiles(&[Provider::Claude; 4]));
+        let layout = sample_layout(&tiles(&[Provider::Claude; 4]));
         let crowded = [rect(-1570, -40, -920, -5), rect(-895, -40, -230, -5)];
         assert!(placement(geometry, &crowded, &layout).is_none());
         assert!(placement(geometry, &[], &Layout::default()).is_none());
@@ -1669,10 +1870,10 @@ mod tests {
 
     #[test]
     fn nearest_fitting_gap_precedes_a_wider_gap() {
-        let layout = Layout::new(&tiles(&[Provider::Claude; 4]));
+        let layout = sample_layout(&tiles(&[Provider::Claude; 4]));
         let obstacles = [
             rect(-1600, -50, -1500, 0),
-            rect(-900, -50, -820, 0),
+            rect(-1020, -50, -970, 0),
             rect(-650, -50, -600, 0),
             rect(-615, -50, -220, 0),
         ];
@@ -1690,16 +1891,16 @@ mod tests {
     fn shorter_gaps_keep_a_prefix_and_route_overflow_click() {
         use Provider::{Claude, Codex};
         let tiles = tiles(&[Claude, Codex, Claude, Codex]);
-        let layout = Layout::new(&tiles);
+        let layout = sample_layout(&tiles);
         let obstacles = [
-            rect(-1600, -50, -800, 0),
+            rect(-1600, -50, -870, 0),
             rect(-660, -50, -540, 0),
             rect(-440, -50, -300, 0),
         ];
         let placed = placement(bar(96), &obstacles, &layout).unwrap();
         assert_eq!(placed.rect.right, -664);
         assert_eq!(placed.fit.visible, 2);
-        assert_eq!(placed.fit.overflow_at, Some(88));
+        assert_eq!(placed.fit.overflow_at, Some(160));
         assert_eq!(
             tiles[placed.fit.visible..]
                 .iter()
@@ -1713,16 +1914,16 @@ mod tests {
             Some(StripClick::Open(100))
         );
         assert_eq!(
-            layout.click_at(point(55), placed, &tiles),
+            layout.click_at(point(100), placed, &tiles),
             Some(StripClick::Open(101))
         );
-        assert_eq!(layout.click_at(point(85), placed, &tiles), None);
+        assert_eq!(layout.click_at(point(156), placed, &tiles), None);
         assert_eq!(
-            layout.click_at(point(100), placed, &tiles),
+            layout.click_at(point(172), placed, &tiles),
             Some(StripClick::Overflow {
                 first: 2,
                 anchor: POINT {
-                    x: placed.rect.left + 100,
+                    x: placed.rect.left + 172,
                     y: placed.rect.top + 20
                 },
             })
@@ -1731,16 +1932,16 @@ mod tests {
 
     #[test]
     fn one_available_slot_shows_all_accounts_in_overflow() {
-        let obstacles = [rect(-1600, -50, -250, 0)];
+        let obstacles = [rect(-1600, -50, -280, 0)];
         let tiles = tiles(&[Provider::Claude; 4]);
-        let layout = Layout::new(&tiles);
+        let layout = sample_layout(&tiles);
         let placed = placement(bar(96), &obstacles, &layout).unwrap();
         assert_eq!(
             placed.fit,
             Fit {
                 visible: 0,
                 overflow_at: Some(0),
-                width: 36
+                width: OVERFLOW_WIDTH
             }
         );
         assert!(matches!(
@@ -1748,7 +1949,7 @@ mod tests {
             Some(StripClick::Overflow { first: 0, .. })
         ));
         assert_eq!(
-            placement(bar(96), &obstacles, &Layout::new(&tiles[..1]))
+            placement(bar(96), &obstacles, &sample_layout(&tiles[..1]))
                 .unwrap()
                 .fit
                 .overflow_at,
@@ -1766,28 +1967,72 @@ mod tests {
 
     #[test]
     fn segmented_ring_fills_exactly_one_fractional_segment() {
-        let segments: Vec<_> = arcs(14.75, 7, 48.).collect();
+        let segments: Vec<_> = arcs(7, 52.).collect();
         assert_eq!(segments.len(), 7);
         assert!(segments[0].start > 0.);
         assert!(segments[0].span < TAU / 7.);
         assert!(segments[..3].iter().all(|arc| arc.filled == arc.span));
         assert!((segments[3].filled / segments[3].span - 0.36).abs() < 0.00001);
         assert!(segments[4..].iter().all(|arc| arc.filled == 0.));
-        for (input, expected) in [(-5., 0.), (0., 0.), (100., 1.), (104., 1.), (f64::NAN, 0.)] {
-            assert!(
-                arcs(11.5, 5, input).all(|arc| (arc.filled / arc.span - expected).abs() < 0.00001)
-            );
+        let short: Vec<_> = arcs(5, 78.).collect();
+        assert_eq!(short.len(), 5);
+        assert_eq!(short[0].filled, short[0].span);
+        assert!((short[1].filled / short[1].span - 0.1).abs() < 0.00001);
+        assert!(short[2..].iter().all(|arc| arc.filled == 0.));
+        for (input, expected) in [(-5., 1.), (0., 1.), (100., 0.), (104., 0.), (f64::NAN, 0.)] {
+            assert!(arcs(5, input).all(|arc| (arc.filled / arc.span - expected).abs() < 0.00001));
         }
     }
 
     #[test]
     fn continuous_fable_ring_starts_at_noon() {
         for remaining in [0., 31.5, 100.] {
-            let arc = arcs(8.25, 1, remaining).next().unwrap();
+            let arc = arcs(1, remaining).next().unwrap();
             assert_eq!(arc.start, 0.);
             assert_eq!(arc.span, TAU);
-            assert!((arc.filled / TAU - remaining as f32 / 100.).abs() < 0.00001);
+            assert!((arc.filled / TAU - (1. - remaining as f32 / 100.)).abs() < 0.00001);
         }
+    }
+
+    #[test]
+    fn active_reset_hands_follow_their_own_window() {
+        let now = 1_800_000_000;
+        let week = reset_hand(Some(now + WEEK_SECONDS / 4), now, WEEK_SECONDS).unwrap();
+        let short = reset_hand(Some(now + SHORT_SECONDS / 2), now, SHORT_SECONDS).unwrap();
+        let clamped = reset_hand(Some(now + SHORT_SECONDS + 1), now, SHORT_SECONDS).unwrap();
+        assert_eq!(week.angle, TAU / 4.);
+        assert_eq!(short.angle, TAU / 2.);
+        assert_eq!(clamped.angle, TAU);
+        assert!(!week.expired && !short.expired && !clamped.expired);
+    }
+
+    #[test]
+    fn expired_reset_hands_are_dashed_at_noon_and_missing_hands_are_omitted() {
+        for window in [WEEK_SECONDS, SHORT_SECONDS] {
+            for reset in [100, 99, i64::MIN] {
+                assert_eq!(
+                    reset_hand(Some(reset), 100, window),
+                    Some(ResetHand {
+                        angle: 0.,
+                        expired: true
+                    })
+                );
+            }
+            assert_eq!(reset_hand(None, 100, window), None);
+        }
+    }
+
+    #[test]
+    fn alias_measurement_uses_the_native_font_and_caps_long_text() {
+        let renderer = Renderer::new().unwrap();
+        assert_eq!(renderer.alias_width(""), 0);
+        assert!((1..LABEL_MAX_WIDTH).contains(&renderer.alias_width("A")));
+        assert!((1..LABEL_MAX_WIDTH).contains(&renderer.alias_width("개인")));
+        assert!(renderer.alias_width("Pro 200") > renderer.alias_width("A"));
+        assert_eq!(
+            renderer.alias_width("An account with a much longer label"),
+            LABEL_MAX_WIDTH
+        );
     }
 
     #[test]
@@ -1798,16 +2043,16 @@ mod tests {
             Provider::Codex,
             Provider::Codex,
         ]);
-        let layout = Layout::new(&tiles);
+        let layout = sample_layout(&tiles);
         for dpi in [96, 120, 144] {
             let fit = layout.fit(dip(layout.width, dpi), dpi).unwrap();
             assert_eq!(
-                layout.slot_at(dip(37, dpi), dpi, fit),
+                layout.slot_at(dip(layout.starts[1], dpi), dpi, fit),
                 Some(Slot::Account(1))
             );
             assert_eq!(layout.slot_at(dip(layout.dividers[0], dpi), dpi, fit), None);
             assert_eq!(
-                layout.slot_at(dip(84, dpi), dpi, fit),
+                layout.slot_at(dip(layout.starts[2], dpi), dpi, fit),
                 Some(Slot::Account(2))
             );
             assert_eq!(layout.slot_at(dip(layout.width, dpi), dpi, fit), None);
@@ -1817,12 +2062,46 @@ mod tests {
     #[test]
     fn layout_preserves_interleaved_provider_order() {
         let tiles = tiles(&[Provider::Codex, Provider::Claude, Provider::Codex]);
-        let layout = Layout::new(&tiles);
-        assert_eq!(layout.starts, [0, 47, 94]);
-        assert_eq!(layout.dividers, [41, 88]);
+        let layout = sample_layout(&tiles);
+        assert_eq!(layout.starts, [0, 83, 166]);
+        assert_eq!(layout.dividers, [77, 160]);
         assert_eq!(
-            layout.slot_at(60, 96, layout.fit(layout.width, 96).unwrap()),
+            layout.slot_at(88, 96, layout.fit(layout.width, 96).unwrap()),
             Some(Slot::Account(1))
         );
+    }
+
+    #[test]
+    fn variable_tile_widths_set_scaled_account_and_overflow_bounds() {
+        let mut tiles = tiles(&[Provider::Codex; 3]);
+        tiles[0].alias = "A".into();
+        tiles[1].alias = "Long account alias".into();
+        tiles[2].alias.clear();
+        let layout = Layout::new(&tiles, |alias| if alias == "A" { 7 } else { 95 });
+        assert_eq!(layout.widths, [59, 99, 48]);
+        assert_eq!(layout.starts, [0, 60, 160]);
+        for dpi in [96, 120, 144, 192] {
+            let fit = layout.fit(dip(200, dpi), dpi).unwrap();
+            assert_eq!(fit.visible, 2);
+            assert_eq!(fit.overflow_at, Some(164));
+            assert_eq!(fit.width, 200);
+            assert_eq!(
+                layout.slot_at(dip(59, dpi) - 1, dpi, fit),
+                Some(Slot::Account(0))
+            );
+            assert_eq!(layout.slot_at(dip(59, dpi), dpi, fit), None);
+            assert_eq!(
+                layout.slot_at(dip(60, dpi), dpi, fit),
+                Some(Slot::Account(1))
+            );
+            assert_eq!(layout.slot_at(dip(159, dpi), dpi, fit), None);
+            assert_eq!(
+                layout.slot_at(dip(164, dpi), dpi, fit),
+                Some(Slot::Overflow)
+            );
+            assert_eq!(layout.slot_at(dip(200, dpi), dpi, fit), None);
+            let smaller = layout.fit(dip(200, dpi) - 1, dpi).unwrap();
+            assert_eq!(smaller.visible, 1);
+        }
     }
 }

@@ -16,7 +16,7 @@ Windows 11 x64 작업표시줄에서 Claude Code와 Codex의 계정별 구독 �
 
 ## 설치와 계정 연결
 
-**1.1.4 설치 상태** — Windows Defender가 설치 검증 중 `quota.exe`를 `Trojan:Win32/Bearfoos.A!ml`로 탐지해 격리했습니다. 탐지 원인 확인과 설치 재검증이 필요합니다. 새 게이지는 로컬에서 [시안](index.html)을 열어 볼 수 있습니다.
+**1.1.5 설치 상태** — 실시간 보호를 켠 Windows 11(보안 인텔리전스 1.463.485.0)에서 설치와 실행을 검증했습니다. 1.1.4는 이전 정의에서 `Trojan:Win32/Bearfoos.A!ml`로 탐지됐지만, 같은 파일이 이 정의에서는 탐지되지 않았습니다. 알림 영역의 숨겨진 아이콘을 열었다 닫은 뒤 게이지가 작업표시줄 아래로 가려지던 문제는 1.1.5에서 수정했습니다.
 
 1. 설치가 검증된 버전의 Windows x64 설치 파일을 실행합니다. 설치는 현재 Windows 사용자에게 적용됩니다. WebView2가 없는 PC는 최초 설치 시 인터넷 연결이 필요합니다.
 2. 시작 메뉴에서 **Quota**를 열고 Claude 또는 GPT를 선택합니다. 제안된 폴더를 확인하거나 **폴더 선택**으로 Windows에서 이미 로그인한 CLI 프로필을 지정합니다. Claude는 `.credentials.json`, Codex는 구독 OAuth 로그인이 들어 있는 `auth.json`을 사용하는 프로필을 지원합니다.
@@ -39,7 +39,7 @@ Windows x64, Rust MSVC 도구 체인, Visual Studio C++ Build Tools와 Windows S
 ```powershell
 cargo test --locked
 powershell -NoProfile -ExecutionPolicy Bypass -File .\packaging\build.ps1
-Get-FileHash .\dist\Quota-1.1.4-windows-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\dist\Quota-1.1.5-windows-x64-setup.exe -Algorithm SHA256
 ```
 
 빌드 스크립트는 잠금 파일로 Rust 릴리스를 빌드하고, 해시로 검증한 NSIS와 Microsoft 서명을 확인한 WebView2 부트스트래퍼로 `dist`의 설치본과 체크섬 파일을 생성합니다. 최초 빌드에는 네트워크 연결이 필요합니다.

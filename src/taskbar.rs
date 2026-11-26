@@ -568,6 +568,20 @@ fn window_rect(window: HWND) -> Option<RECT> {
     (bounds.right > bounds.left && bounds.bottom > bounds.top).then_some(bounds)
 }
 
+fn is_below(window: HWND, other: HWND) -> bool {
+    let mut current = window;
+    // Topmost windows come first, so the walk is short. The cap bounds a z-order that
+    // changes during the walk.
+    for _ in 0..4096 {
+        match unsafe { GetWindow(current, GW_HWNDPREV) } {
+            Ok(above) if above == other => return true,
+            Ok(above) => current = above,
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
 fn intersects(a: RECT, b: RECT) -> bool {
     a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
 }
@@ -1090,7 +1104,9 @@ impl Overlay {
             self.dirty = true;
             return;
         }
-        if old.is_none()
+        // Activating the taskbar, e.g. closing the hidden-icons flyout, raises Explorer's
+        // topmost taskbar over the overlay. Restore the overlay only when it is covered.
+        if (old.is_none() || is_below(window, HWND(target.shell as *mut _)))
             && unsafe {
                 SetWindowPos(
                     window,
@@ -1884,6 +1900,51 @@ mod tests {
             resets_at: Some(250),
         });
         assert!(clock_needs_redraw(&sample, 179, 180));
+    }
+
+    #[test]
+    fn z_order_check_detects_a_window_raised_above_the_overlay() {
+        let create = || unsafe {
+            CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+                w!("STATIC"),
+                None,
+                WS_POPUP,
+                0,
+                0,
+                1,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+        };
+        let raise = |window| unsafe {
+            SetWindowPos(
+                window,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOMOVE,
+            )
+            .unwrap()
+        };
+        let (overlay, taskbar) = (create(), create());
+        raise(overlay);
+        assert!(!is_below(overlay, taskbar));
+        raise(taskbar);
+        assert!(is_below(overlay, taskbar));
+        assert!(!is_below(taskbar, overlay));
+        raise(overlay);
+        assert!(!is_below(overlay, taskbar));
+        unsafe {
+            DestroyWindow(overlay).unwrap();
+            DestroyWindow(taskbar).unwrap();
+        }
     }
 
     fn rect(left: i32, top: i32, right: i32, bottom: i32) -> RECT {

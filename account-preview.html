@@ -1,0 +1,22 @@
+﻿<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quota · 작업표시줄 미리보기</title>
+<link rel="stylesheet" href="preview.css">
+<script src="preview.js" defer></script>
+</head>
+<body>
+<header><div class="brand"><i aria-hidden="true"></i>Quota</div><span class="sample">예시 데이터</span></header>
+<main>
+<div class="heading"><div><h1>작업표시줄 미리보기</h1><p>12시에서 시계 방향으로, 색이 채워진 만큼 할당량이 남았습니다.</p></div></div>
+<section class="stage" aria-label="작업표시줄과 계정 상세">
+<div class="scene"><div class="canvas"><div class="canvashead"><span>게이지 확대</span><button id="theme" aria-pressed="false">밝은 배경</button></div><div class="study" id="study"></div><div class="legend" aria-label="고리 범례"><span class="week">주간 · 7칸</span><span class="short">5시간 · 5칸</span><span class="fable">Fable · 연속</span></div><div class="dimension" id="dim"></div></div>
+<aside id="panel" aria-labelledby="account-title" hidden></aside></div>
+<div class="taskbar"><div class="barleft"><i class="windows" aria-hidden="true"></i><span>실제 크기 · 1×</span></div><div class="tray"><div id="actual"></div><span aria-hidden="true">⌃</span><time>10:24<br>11.26</time></div></div>
+</section>
+<div class="settings-title"><h2>표시할 계정</h2><span>작업표시줄에 고정</span></div>
+<div id="cards"></div><p class="note">11월 26일 10:24 기준 예시 화면 · GPT는 Codex 구독 할당량을 표시합니다.</p>
+</main>
+</body></html>

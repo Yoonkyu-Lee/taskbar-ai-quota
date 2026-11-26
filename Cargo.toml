@@ -1,0 +1,20 @@
+[package]
+name = "quota"
+version = "1.0.3"
+edition = "2024"
+
+[dependencies]
+serde = {version="1", features=["derive"]}
+serde_json = "1"
+chrono = {version="0.4", features=["serde"]}
+reqwest = {version="0.12", features=["blocking","json","native-tls"], default-features=false}
+base64 = "0.22"
+sha2 = "0.10"
+walkdir = "2"
+rusqlite = {version="0.34", features=["bundled"]}
+wry = "=0.53.5"
+tao = "=0.34.5"
+rfd = "0.15"
+windows = {version="0.61", features=["Win32_Foundation","Win32_UI_WindowsAndMessaging","Win32_Graphics_Gdi","Win32_Graphics_Direct2D","Win32_Graphics_Direct2D_Common","Win32_Graphics_DirectWrite","Win32_Graphics_Dxgi_Common","Win32_Graphics_Imaging","Win32_UI_Shell","Win32_UI_HiDpi","Win32_UI_Accessibility","Win32_System_Com","Win32_System_Threading","Win32_System_JobObjects","Win32_System_LibraryLoader","Win32_Security"]}
+tempfile = "3"
+

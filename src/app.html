@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="ko">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'"
+  />
+  <title>Quota</title
+  ><style>
+    :root {
+      font:
+        14px "Segoe UI",
+        "Malgun Gothic",
+        sans-serif;
+      color-scheme: dark;
+      --bg: #20262e;
+      --card: #2a323b;
+      --line: #49535e;
+      --fg: #ecf1f4;
+      --muted: #b4bfc6;
+      --week: #bca8ff;
+      --short: #67d7cc;
+      --fable: #ffc078;
+      --accent: #aaddca;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --bg: #f6f8f5;
+        --card: white;
+        --line: #d0d9d3;
+        --fg: #22352a;
+        --muted: #52665a;
+        --week: #725db9;
+        --short: #187a71;
+        --fable: #ae641e;
+        --accent: #29765d;
+      }
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    main {
+      max-width: 620px;
+      margin: auto;
+      padding: 18px;
+    }
+    header,
+    .line,
+    .bar,
+    footer,
+    .identity,
+    .actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    h1,
+    h2,
+    h3,
+    p,
+    dl,
+    dd {
+      margin: 0;
+    }
+    h1 {
+      font-size: 21px;
+      letter-spacing: -0.8px;
+    }
+    h2 {
+      font-size: 16px;
+    }
+    h3 {
+      font-size: 13px;
+    }
+    .muted,
+    small {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    header {
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 12px;
+    }
+    .identity {
+      justify-content: start;
+    }
+    .logo {
+      width: 25px;
+      height: 25px;
+    }
+    .Claude {
+      color: var(--fable);
+    }
+    .Codex {
+      color: var(--short);
+    }
+    .logo svg {
+      width: 100%;
+      height: 100%;
+    }
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+    button {
+      cursor: pointer;
+      background: var(--card);
+      color: var(--fg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 9px;
+      font-size: 12px;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible {
+      outline: 2px solid var(--accent);
+    }
+    .tabs {
+      display: flex;
+      gap: 17px;
+      border-bottom: 1px solid var(--line);
+      margin: 14px 0;
+    }
+    .tabs button {
+      background: none;
+      border: 0;
+      border-radius: 0;
+      border-bottom: 2px solid transparent;
+      padding: 6px 0;
+    }
+    .tabs [aria-pressed="true"] {
+      border-color: var(--accent);
+      font-weight: 650;
+    }
+    .pages {
+      display: grid;
+    }
+    .pages > section {
+      grid-area: 1/1;
+      min-width: 0;
+    }
+    .pages > [inert] {
+      visibility: hidden;
+    }
+    .limit {
+      margin: 0 0 14px;
+    }
+    .meter {
+      margin: 7px 0 4px;
+      height: 5px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--line);
+    }
+    .meter i {
+      display: block;
+      height: 100%;
+    }
+    .credits,
+    footer,
+    .summary > div {
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+    }
+    .chart {
+      display: grid;
+      grid-template-columns: repeat(30, minmax(0, 1fr));
+      height: 61px;
+      align-items: end;
+      margin-top: 9px;
+      border-bottom: 1px solid var(--line);
+    }
+    .chart button {
+      height: 100%;
+      padding: 0;
+      display: flex;
+      align-items: end;
+      justify-content: center;
+      background: transparent;
+      border: 0;
+      border-radius: 2px;
+    }
+    .chart i {
+      width: 65%;
+      background: var(--accent);
+      min-height: 1px;
+      border-radius: 2px;
+    }
+    .chart button[aria-pressed="true"] {
+      background: var(--line);
+    }
+    output {
+      display: block;
+      font-size: 12px;
+      margin: 6px 0 12px;
+    }
+    .summary > div {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 13px;
+    }
+    .summary dd {
+      font-variant-numeric: tabular-nums;
+    }
+    .message:not(:empty) {
+      background: var(--card);
+      padding: 8px 10px;
+      margin: 10px 0;
+      border-left: 3px solid var(--accent);
+      font-size: 12px;
+    }
+    .account,
+    form {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 12px;
+      margin: 10px 0;
+    }
+    .account p {
+      overflow-wrap: anywhere;
+    }
+    .actions {
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .actions label {
+      font-size: 12px;
+    }
+    #profile-hint { margin-top: 6px; }
+    label {
+      display: block;
+    }
+    .field {
+      margin-top: 10px;
+    }
+    .field input,
+    .field select {
+      background: var(--bg);
+      color: var(--fg);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      width: 100%;
+      padding: 7px;
+      margin-top: 4px;
+    }
+    .folder {
+      overflow-wrap: anywhere;
+      font-size: 12px;
+      flex: 1;
+      color: var(--muted);
+    }
+    .check {
+      font-size: 12px;
+      margin: 12px 0;
+    }
+    .primary {
+      background: var(--fg);
+      color: var(--bg);
+    }
+    .account .title {
+      border: 0;
+      background: none;
+      text-align: left;
+      padding: 0;
+      font-weight: 650;
+      font-size: 14px;
+    }
+    footer {
+      margin-top: 12px;
+    }
+    .controls {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .empty {
+      padding: 10px 0;
+      color: var(--muted);
+    }
+    [hidden] {
+      display: none !important;
+    }
+  </style>
+  <main>
+    <header>
+      <div class="identity">
+        <div id="brand"></div>
+        <div>
+          <h1 id="heading">Quota</h1>
+          <p id="sub" class="muted"></p>
+        </div>
+      </div>
+      <button id="settings">계정 설정</button>
+    </header>
+    <div id="msg" class="message" role="status"></div>
+    <article id="detail" hidden></article>
+    <section id="manage">
+      <div class="line"><h2>연결한 계정</h2><button id="jump-add">계정 추가</button></div>
+      <div id="accounts"></div>
+      <form id="connect">
+        <h2>계정 추가</h2>
+        <label class="field"
+          >서비스<select id="provider">
+            <option>Claude</option>
+            <option value="Codex">GPT · Codex</option>
+          </select></label
+        >
+        <label class="field"
+          >작업표시줄 별칭<input
+            id="alias"
+            maxlength="20"
+            value="개인"
+            required
+        /></label>
+        <div class="field">프로필 폴더</div>
+        <div class="bar">
+          <span class="folder" id="folder"></span
+          ><button type="button" id="browse">폴더 선택</button>
+        </div>
+        <p class="muted" id="profile-hint"></p>
+        <label class="check"
+          ><input type="checkbox" id="dedicated" /> 이 폴더는 이 계정만
+          사용했습니다.</label
+        >
+        <p class="muted">
+          선택하면 계정 ID가 없는 과거 로그도 이 계정의 사용 이력에 포함합니다.
+        </p>
+        <div class="actions">
+          <button type="submit" id="attach" class="primary">이 폴더로 연결</button>
+          <button type="button" id="login">다른 계정으로 로그인</button>
+        </div>
+        <div id="form-status" class="message" role="status"></div>
+        <div id="login-session" hidden>
+          <label id="login-address" class="field" hidden>로그인 링크
+            <input id="login-url" type="text" readonly autocomplete="off" spellcheck="false" />
+          </label>
+          <div class="actions">
+            <button type="button" id="copy-login" class="primary" hidden>로그인 링크 복사</button>
+            <button type="button" id="cancel-login">로그인 취소</button>
+          </div>
+        </div>
+      </form>
+    </section>
+    <footer>
+      <span id="stamp" class="muted"></span>
+      <div class="controls">
+        <button id="refresh" hidden>새로 고침</button
+        ><button id="hide">숨기기</button><button id="quit">종료</button>
+      </div>
+    </footer>
+  </main>
+  <script>
+    /*APP_JS*/
+  </script>
+</html>

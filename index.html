@@ -10,7 +10,7 @@
 <body>
   <header class="mast"><span class="wordmark"><i aria-hidden="true"></i>Quota</span><a href="account-preview.html">이전 계정 상세 시안 ↗</a></header>
   <main>
-    <header class="intro"><h1>작업표시줄 리셋 시계</h1><p>고리의 길이로 남은 할당량을 읽고, 눈금으로 다음 리셋까지의 시간을 확인하세요.</p></header>
+    <header class="intro"><h1>작업표시줄 리셋 시계</h1><p>고리의 길이는 남은 할당량을, 타이머는 다음 리셋까지의 시간을 보여줍니다.</p></header>
     <section class="board" aria-label="게이지 미리보기">
       <div class="canvas">
         <div class="zoom"><div class="cap">게이지 확대 <span>3×</span></div><div id="zoom"></div></div>
@@ -21,8 +21,8 @@
       <div class="bar"><span class="bar-label">작업표시줄 <strong>1×</strong></span><div id="strip" aria-label="미리 볼 계정"></div><div class="system-clock"><span id="clock"></span><span id="date"></span></div></div>
     </section>
     <section class="choose" aria-label="타이머 표현 방식">
-      <button class="option" data-mode="scale" aria-pressed="true"><span class="radio"></span><span><strong>별칭 아래 시간 눈금</strong><small>보라색 7칸은 하루씩, 청록색 5칸은 한 시간씩 꺼집니다.</small></span><span class="sample-tile" aria-hidden="true"></span></button>
-      <button class="option" data-mode="hands" aria-pressed="false"><span class="radio"></span><span><strong>고리 위 시곗바늘</strong><small>보라색 마름모와 청록색 점이 각 고리에서 반시계 방향으로 12시에 다가갑니다.</small></span><span class="sample-tile" aria-hidden="true"></span></button>
+      <button class="option" data-mode="hands" aria-pressed="true"><span class="radio"></span><span><strong>고리 위 시곗바늘</strong><small>바깥 빨간 선은 주간, 안쪽 빨간 선은 5시간 리셋이 가까워질수록 12시로 돌아옵니다.</small></span><span class="sample-tile" aria-hidden="true"></span></button>
+      <button class="option" data-mode="scale" aria-pressed="false"><span class="radio"></span><span><strong>별칭 아래 시간 눈금</strong><small>보라색 7칸은 하루씩, 청록색 5칸은 한 시간씩 꺼집니다.</small></span><span class="sample-tile" aria-hidden="true"></span></button>
     </section>
     <section class="controls" aria-label="시안 조작">
       <div class="experiment"><h2>시간을 앞당겨 보기</h2><p>할당량을 고정하고 두 타이머의 움직임을 비교하세요.</p><div class="steps"><button data-step="60">+1시간</button><button data-step="1440">+1일</button><button id="rewind" disabled>처음으로</button></div><output id="elapsed" aria-live="polite"></output></div>

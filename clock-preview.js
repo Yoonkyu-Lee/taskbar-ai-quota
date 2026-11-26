@@ -12,7 +12,7 @@ const rings = {
 };
 const base = new Date(2026, 10, 26, 10, 24);
 const $ = (selector) => document.querySelector(selector);
-let mode = "scale", selected = 0, elapsed = 0;
+let mode = "hands", selected = 0, elapsed = 0;
 let startedAt = Date.now(), advance = 0;
 
 function duration(minutes) {
@@ -59,15 +59,15 @@ function ring(a, key) {
   }).join("");
 }
 function hand(a, key) {
-  const { radius, color } = rings[key];
+  const { radius } = rings[key];
   const left = timeRatio(a, key);
-  const [x, y] = point(radius, left);
-  // A hollow marker at noon distinguishes an elapsed window from a full new period.
-  const fill = left > 0 ? color : "#172123";
-  const stroke = left > 0 ? "#10191c" : color;
-  return key === "week"
-    ? '<path transform="translate(' + x + ' ' + y + ')" d="M0 -5.3 5.3 0 0 5.3 -5.3 0Z" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.8"/>'
-    : '<circle cx="' + x + '" cy="' + y + '" r="4.4" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.8"/>';
+  const y = 40 - radius;
+  // Each hand crosses only its own ring, including when both point to noon.
+  const line = 'd="M40 ' + (y + 3.6) + ' v-7.6"';
+  const dash = left === 0 ? ' stroke-dasharray="2.8 2 2.8"' : "";
+  return '<g transform="rotate(' + (left * 360) + ' 40 40)" fill="none">' +
+    '<path ' + line + ' stroke="#182125" stroke-width="6"/>' +
+    '<path ' + line + ' stroke="#ff4848" stroke-width="3.6"' + dash + '/></g>';
 }
 function tile(a, style = mode) {
   const logo = a.provider === "Claude" ? "claude" : "openai";

@@ -6,9 +6,9 @@ const accounts = [
   { provider: "GPT", alias: "Pro 200", used: { week: 8, short: 62 }, weekReset: 6 * 1440 + 720, shortReset: 255 },
 ];
 const rings = {
-  week: { name: "주간", color: "#b9a5ff", radius: 35, cells: 7, minutes: 7 * 1440 },
-  short: { name: "5시간", color: "#65ddd1", radius: 26.5, cells: 5, minutes: 300 },
-  fable: { name: "Fable", color: "#ffb784", radius: 19, cells: 1 },
+  week: { name: "주간", color: "#b9a5ff", radius: 35, stroke: 8, cells: 7, minutes: 7 * 1440 },
+  short: { name: "5시간", color: "#65ddd1", radius: 27, stroke: 8, cells: 5, minutes: 300 },
+  fable: { name: "Fable", color: "#ffb784", radius: 20, stroke: 6, cells: 1 },
 };
 const base = new Date(2026, 10, 26, 10, 24);
 const $ = (selector) => document.querySelector(selector);
@@ -41,10 +41,9 @@ function point(radius, fraction) {
   return [40 + radius * Math.sin(angle), 40 - radius * Math.cos(angle)];
 }
 function ring(a, key) {
-  const { radius, cells, color } = rings[key];
+  const { radius, stroke, cells, color } = rings[key];
   const value = a.used[key] / 100;
-  const stroke = key === "fable" ? 3 : 5.2;
-  const track = "#505e62";
+  const track = key === "short" ? "#384b4d" : "#505e62";
   if (cells === 1) {
     const circle = '<circle cx="40" cy="40" r="' + radius + '" fill="none" stroke-width="' + stroke + '"';
     return circle + ' stroke="' + track + '"/>' + (value > 0 ? circle + ' stroke="' + color + '" transform="rotate(-90 40 40)" pathLength="100" stroke-dasharray="' + value * 100 + ' 100"/>' : "");
@@ -61,11 +60,12 @@ function ring(a, key) {
 function hand(a, key) {
   const { radius } = rings[key];
   const left = timeRatio(a, key);
+  const angle = left === 0 ? 0 : (1 - left) * 360;
   const y = 40 - radius;
   // Each hand crosses only its own ring, including when both point to noon.
   const line = 'd="M40 ' + (y + 3.6) + ' v-7.6"';
   const dash = left === 0 ? ' stroke-dasharray="2.8 2 2.8"' : "";
-  return '<g transform="rotate(' + (left * 360) + ' 40 40)" fill="none">' +
+  return '<g transform="rotate(' + angle + ' 40 40)" fill="none">' +
     '<path ' + line + ' stroke="#182125" stroke-width="6"/>' +
     '<path ' + line + ' stroke="#ff4848" stroke-width="3.6"' + dash + '/></g>';
 }

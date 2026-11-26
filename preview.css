@@ -14,7 +14,7 @@ button{font:inherit;color:inherit;cursor:pointer}button:focus-visible{outline:2p
 .stage{--week:#bca8ff;--short:#67d7cc;--fable:#ffc078}
 .stage.light{--week:#6750ac;--short:#00766e;--fable:#9a5717}
 .week{--color:var(--week)}.short{--color:var(--short)}.fable{--color:var(--fable)}
-.dial-ring{fill:none;stroke:var(--color);stroke-width:4.35}.dial-ring .track{stroke:var(--track)}
+.dial-ring{fill:none;stroke:var(--color);stroke-width:6.4}.dial-ring.fable{stroke-width:4.8}.dial-ring .track{stroke:var(--track)}.dial-ring.short .track{stroke:color-mix(in srgb,var(--track) 70%,var(--ground))}
 .legend{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 18px;margin-top:24px}
 .legend span{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
 .legend span:before{content:"";width:10px;height:4px;border-radius:2px;background:var(--color)}

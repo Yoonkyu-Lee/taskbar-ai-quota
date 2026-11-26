@@ -3,14 +3,14 @@ Unicode true
 !include "LogicLib.nsh"
 !include "x64.nsh"
 Name "Quota"
-OutFile "..\dist\Quota-1.1.0-windows-x64-setup.exe"
+OutFile "..\dist\Quota-1.1.1-windows-x64-setup.exe"
 InstallDir "$LOCALAPPDATA\Programs\TaskbarAiQuota"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
-VIProductVersion "1.1.0.0"
+VIProductVersion "1.1.1.0"
 VIAddVersionKey "ProductName" "Quota"
 VIAddVersionKey "FileDescription" "Quota Windows x64 installer"
-VIAddVersionKey "FileVersion" "1.1.0"
+VIAddVersionKey "FileVersion" "1.1.1"
 VIAddVersionKey "LegalCopyright" "Quota contributors"
 !define REGKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\TaskbarAiQuota"
 !define WEBKEY "SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -73,7 +73,7 @@ Section
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortcut "$SMPROGRAMS\Quota.lnk" "$INSTDIR\quota.exe"
   WriteRegStr HKCU "${REGKEY}" "DisplayName" "Quota"
-  WriteRegStr HKCU "${REGKEY}" "DisplayVersion" "1.1.0"
+  WriteRegStr HKCU "${REGKEY}" "DisplayVersion" "1.1.1"
   WriteRegStr HKCU "${REGKEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${REGKEY}" "DisplayIcon" "$INSTDIR\quota.exe"
   WriteRegStr HKCU "${REGKEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'

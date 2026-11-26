@@ -1167,11 +1167,9 @@ fn light_theme() -> bool {
 // 64x64 alpha masks rasterized from claude.svg and openai.svg, covered by ICONS-LICENSE.txt.
 const CLAUDE_MASK: &[u8; 4096] = include_bytes!("taskbar_claude.alpha");
 const GPT_MASK: &[u8; 4096] = include_bytes!("taskbar_openai.alpha");
-const WEEK_RADIUS: f32 = 35. / 2.;
-const SHORT_RADIUS: f32 = 26.5 / 2.;
-const FABLE_RADIUS: f32 = 19. / 2.;
-const RING_WIDTH: f32 = 5.2 / 2.;
-const FABLE_WIDTH: f32 = 3. / 2.;
+const OUTER_RADIUS: f32 = 19.5;
+const RING_WIDTH: f32 = 4.;
+const FABLE_WIDTH: f32 = 3.;
 const WEEK_SECONDS: i64 = 7 * 24 * 60 * 60;
 const SHORT_SECONDS: i64 = 5 * 60 * 60;
 
@@ -1211,10 +1209,14 @@ struct ResetHand {
 }
 
 fn reset_hand(resets_at: Option<i64>, now: i64, window: i64) -> Option<ResetHand> {
-    let seconds = resets_at?.saturating_sub(now).clamp(0, window);
+    let left = resets_at?.saturating_sub(now).clamp(0, window);
     Some(ResetHand {
-        angle: TAU * (seconds as f32 / window as f32),
-        expired: seconds == 0,
+        angle: if left == 0 {
+            0.
+        } else {
+            TAU * ((window - left) as f32 / window as f32)
+        },
+        expired: left == 0,
     })
 }
 
@@ -1374,28 +1376,40 @@ impl Renderer {
                         HEIGHT as f32 / 2.,
                     );
                     let known = has_quota(tile);
-                    for (limit, radius, stroke, divisions, active) in [
-                        (tile.week.as_ref(), WEEK_RADIUS, RING_WIDTH, 7, palette.week),
+                    let mut outer_edge = OUTER_RADIUS;
+                    for (limit, stroke, divisions, active, track, window) in [
+                        (
+                            tile.week.as_ref(),
+                            RING_WIDTH,
+                            7,
+                            palette.week,
+                            palette.track,
+                            Some(WEEK_SECONDS),
+                        ),
                         (
                             tile.short.as_ref(),
-                            SHORT_RADIUS,
                             RING_WIDTH,
                             5,
                             palette.short,
+                            palette.short_track,
+                            Some(SHORT_SECONDS),
                         ),
                         (
                             tile.fable.as_ref(),
-                            FABLE_RADIUS,
                             FABLE_WIDTH,
                             1,
                             palette.fable,
+                            palette.track,
+                            None,
                         ),
                     ] {
                         let Some(limit) = limit.filter(|limit| limit.remaining.is_finite()) else {
                             continue;
                         };
+                        let radius = outer_edge - stroke / 2.;
+                        outer_edge -= stroke;
                         for arc in arcs(divisions, limit.remaining) {
-                            brush.SetColor(&palette.track);
+                            brush.SetColor(&track);
                             self.arc(
                                 target,
                                 &brush,
@@ -1416,10 +1430,21 @@ impl Renderer {
                                 )?;
                             }
                         }
+                        if let Some(hand) = window.and_then(|w| reset_hand(limit.resets_at, now, w))
+                        {
+                            draw_reset_hand(target, &brush, &palette, center, radius, hand);
+                        }
                     }
                     if !known {
                         brush.SetColor(&palette.track);
-                        self.arc(target, &brush, center, (WEEK_RADIUS, RING_WIDTH), 0., TAU)?;
+                        self.arc(
+                            target,
+                            &brush,
+                            center,
+                            (OUTER_RADIUS - RING_WIDTH / 2., RING_WIDTH),
+                            0.,
+                            TAU,
+                        )?;
                     }
                     let has_fable = tile
                         .fable
@@ -1444,17 +1469,6 @@ impl Renderer {
                         D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
                         None,
                     );
-                    for (limit, radius, window) in [
-                        (tile.week.as_ref(), WEEK_RADIUS, WEEK_SECONDS),
-                        (tile.short.as_ref(), SHORT_RADIUS, SHORT_SECONDS),
-                    ] {
-                        let reset = limit
-                            .filter(|limit| limit.remaining.is_finite())
-                            .and_then(|limit| limit.resets_at);
-                        if let Some(hand) = reset_hand(reset, now, window) {
-                            draw_reset_hand(target, &brush, &palette, center, radius, hand);
-                        }
-                    }
                     let label_left = x + (TILE_PAD + DIAL_SIZE + LABEL_GAP) as f32;
                     let label_right = x + width - TILE_PAD as f32;
                     if label_right > label_left {
@@ -1668,6 +1682,7 @@ struct Palette {
     paper: D2D1_COLOR_F,
     hover: D2D1_COLOR_F,
     track: D2D1_COLOR_F,
+    short_track: D2D1_COLOR_F,
     label: D2D1_COLOR_F,
     line: D2D1_COLOR_F,
     week: D2D1_COLOR_F,
@@ -1696,6 +1711,7 @@ impl Palette {
             paper: color(paper, 0.92),
             hover: color(hover, 1.),
             track: color(track, 1.),
+            short_track: color(if light { 0xafc6be } else { 0x384b4d }, 1.),
             label: color(label, 1.),
             line: color(line, 1.),
             week: color(week, 1.),
@@ -1995,15 +2011,20 @@ mod tests {
     }
 
     #[test]
-    fn active_reset_hands_follow_their_own_window() {
-        let now = 1_800_000_000;
-        let week = reset_hand(Some(now + WEEK_SECONDS / 4), now, WEEK_SECONDS).unwrap();
-        let short = reset_hand(Some(now + SHORT_SECONDS / 2), now, SHORT_SECONDS).unwrap();
-        let clamped = reset_hand(Some(now + SHORT_SECONDS + 1), now, SHORT_SECONDS).unwrap();
-        assert_eq!(week.angle, TAU / 4.);
-        assert_eq!(short.angle, TAU / 2.);
-        assert_eq!(clamped.angle, TAU);
-        assert!(!week.expired && !short.expired && !clamped.expired);
+    fn reset_hands_advance_clockwise_one_tick_per_day_or_hour() {
+        let start = 1_800_000_000;
+        for (window, ticks) in [(WEEK_SECONDS, 7), (SHORT_SECONDS, 5)] {
+            let reset = Some(start + window);
+            assert_eq!(reset_hand(reset, start - 1, window).unwrap().angle, 0.);
+            for tick in 0..ticks {
+                let now = start + tick * (window / ticks);
+                let hand = reset_hand(reset, now, window).unwrap();
+                let expected = TAU * tick as f32 / ticks as f32;
+                assert!((hand.angle - expected).abs() < 0.00001);
+                assert!(!hand.expired);
+            }
+            assert!(reset_hand(reset, start + window - 1, window).unwrap().angle > TAU * 0.99);
+        }
     }
 
     #[test]

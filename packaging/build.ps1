@@ -26,7 +26,7 @@ try {
     if ($LASTEXITCODE -ne 0) {throw 'Rust release build failed'}
     & $compiler.FullName /V2 packaging\setup.nsi
     if ($LASTEXITCODE -ne 0) {throw 'NSIS failed'}
-    $artifact=Get-Item 'dist\Quota-1.1.0-windows-x64-setup.exe'
+    $artifact=Get-Item 'dist\Quota-1.1.1-windows-x64-setup.exe'
     ((Get-FileHash $artifact.FullName).Hash.ToLower()+'  '+$artifact.Name) | Set-Content -Encoding ascii "$($artifact.FullName).sha256"
 } finally {Pop-Location}
 

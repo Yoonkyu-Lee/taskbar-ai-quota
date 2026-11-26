@@ -62,15 +62,15 @@ function resetTime(t) {
   );
 }
 function limit(label, key, v) {
-  if (!v) return "";
-  const value = Math.max(0, Math.min(100, v.remaining));
+  if (!Number.isFinite(v?.remaining)) return "";
+  const used = 100 - Math.max(0, Math.min(100, v.remaining));
   return (
     '<div class="limit"><div class="line"><span>' +
     label +
     "</span><b>" +
-    Number(value.toFixed(1)) +
-    '% 남음</b></div><div class="meter"><i style="width:' +
-    value +
+    Number(used.toFixed(1)) +
+    '% 사용</b></div><div class="meter"><i style="width:' +
+    used +
     "%;background:var(--" +
     key +
     ')"></i></div><small>' +

@@ -27,8 +27,8 @@ function save(){
   for(const {id, added, visible, redeemed} of accounts) prefs[id] = {added,visible,redeemed};
   try {localStorage.setItem(stateKey, JSON.stringify(prefs));} catch {}
 }
-function remaining(a, windowName){
-  return windowName === "short" && a.redeemed ? 100 : a[windowName];
+function used(a, windowName){
+  return windowName === "short" && a.redeemed ? 0 : 100 - a[windowName];
 }
 function logo(provider){
   return '<img class="logo" src="'+provider+'.svg" alt="">';
@@ -44,9 +44,9 @@ function resetLabel(minutes){
   return left+" 후 초기화 · "+(end.getMonth()+1)+"/"+end.getDate()+" "+clock(minutes);
 }
 const faces = {
-  week: {label:"주간", radius:29.5, divisions:7},
-  short: {label:"5시간", radius:23, divisions:5},
-  fable: {label:"Fable 주간", radius:16.5, divisions:1}
+  week: {label:"주간", radius:28, divisions:7},
+  short: {label:"5시간", radius:21.6, divisions:5},
+  fable: {label:"Fable 주간", radius:16, divisions:1}
 };
 
 function dialRing(key, value){
@@ -75,9 +75,9 @@ function dialRing(key, value){
 
 function gauge(a){
   const windows = Object.keys(faces).filter(key => a[key] != null);
-  const label = windows.map(key=>faces[key].label+" "+remaining(a,key)+"%").join(", ");
-  const description = providers[a.provider]+" "+a.alias+" · "+a.email+" · 잔여율 "+label;
-  const rings = windows.map(key=>dialRing(key,remaining(a,key))).join("");
+  const label = windows.map(key=>faces[key].label+" "+used(a,key)+"%").join(", ");
+  const description = providers[a.provider]+" "+a.alias+" · "+a.email+" · 사용률 "+label;
+  const rings = windows.map(key=>dialRing(key,used(a,key))).join("");
   return `<button class="gauge-btn ${a.provider}" data-open="${a.id}" aria-expanded="${activeId===a.id}" aria-controls="panel" aria-label="${description}" title="${description}">
     <span class="gauge"><svg viewBox="0 0 64 64" aria-hidden="true">${rings}</svg>${logo(a.provider)}</span><span class="account-name">${a.alias}</span></button>`;
 }
@@ -103,16 +103,16 @@ function drawCards(){
   }).join("");
 }
 function limitRow(key, value, minutes){
-  return `<div class="quota ${key}"><div class="quota-head"><span>${faces[key].label} 한도</span><b>${value}% 남음</b></div><div class="meter"><i style="width:${value}%"></i></div><div class="meta">${resetLabel(minutes)}</div></div>`;
+  return `<div class="quota ${key}"><div class="quota-head"><span>${faces[key].label} 한도</span><b>${value}% 사용</b></div><div class="meter"><i style="width:${value}%"></i></div><div class="meta">${resetLabel(minutes)}</div></div>`;
 }
 function limits(a){
   const count=a.tickets===null?null:a.tickets-Number(a.redeemed);
   let creditNote="이 계정에 제공된 리셋권 정보가 없습니다.";
   if(count!==null) creditNote=count ? "만료 "+a.expires : "사용 가능한 리셋권이 없습니다.";
-  const canUse=count>0 && remaining(a,"short")<100;
-  return limitRow("week",a.week,a.reset[1])+
-    limitRow("short",remaining(a,"short"),a.redeemed?300:a.reset[0])+
-    (a.fable != null ? limitRow("fable",a.fable,a.reset[1]) : "")+
+  const canUse=count>0 && used(a,"short")>0;
+  return limitRow("week",used(a,"week"),a.reset[1])+
+    limitRow("short",used(a,"short"),a.redeemed?300:a.reset[0])+
+    (a.fable != null ? limitRow("fable",used(a,"fable"),a.reset[1]) : "")+
     `<div class="ticket"><span>리셋권</span><div><b>${count===null?"정보 없음":count+"장"}</b>${canUse?'<button class="action" id="redeem" title="예시 리셋권 1장으로 5시간 한도 초기화">5시간 리셋 체험</button>':""}</div></div>
     <p class="feedback">${creditNote}${a.redeemed?" · 5시간 리셋 체험 완료":""}</p>`;
 }

@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quota · 작업표시줄 리셋 시계</title>
   <link rel="stylesheet" href="clock-preview.css">
+  <script defer src="dial-preview.js"></script>
   <script defer src="clock-preview.js"></script>
 </head>
 <body>
   <header class="mast"><span class="wordmark"><i aria-hidden="true"></i>Quota</span><a href="account-preview.html">이전 계정 상세 시안 ↗</a></header>
   <main>
-    <header class="intro"><h1>작업표시줄 리셋 시계</h1><p>색이 찬 만큼 한도를 사용했습니다. 빨간 바늘에서 12시까지 시계 방향으로 남은 눈금이 리셋까지 남은 시간입니다.</p></header>
+    <header class="intro"><h1>작업표시줄 리셋 시계</h1><p>색이 찬 만큼 한도를 사용했습니다. 주간과 Fable은 7칸과 바깥 빨간 바늘을 공유하고, 안쪽 5시간 고리는 5칸과 별도 바늘을 씁니다.</p></header>
     <section class="board" aria-label="게이지 미리보기">
       <div class="canvas">
         <div class="zoom"><div class="cap">게이지 확대 <span>3×</span></div><div id="zoom"></div></div>
@@ -26,7 +27,7 @@
     </section>
     <section class="controls" aria-label="시안 조작">
       <div class="experiment"><h2>시간을 앞당겨 보기</h2><p>사용량을 고정하고 두 타이머의 움직임을 비교하세요.</p><div class="steps"><button data-step="60">+1시간</button><button data-step="1440">+1일</button><button id="rewind" disabled>처음으로</button></div><output id="elapsed" aria-live="polite"></output></div>
-      <div class="sliders"><h2>사용량 바꿔 보기</h2><div class="slider"><label for="week">주간</label><input id="week" type="range" min="0" max="100"><output for="week" id="week-value"></output></div><div class="slider"><label for="short">5시간</label><input id="short" type="range" min="0" max="100"><output for="short" id="short-value"></output></div></div>
+      <div class="sliders"><h2>사용량 바꿔 보기</h2><div class="slider"><label for="week">주간</label><input id="week" type="range" min="0" max="100"><output for="week" id="week-value"></output></div><div class="slider"><label for="fable">Fable</label><input id="fable" type="range" min="0" max="100"><output for="fable" id="fable-value"></output></div><div class="slider"><label for="short">5시간</label><input id="short" type="range" min="0" max="100"><output for="short" id="short-value"></output></div></div>
     </section>
   </main>
 </body>

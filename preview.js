@@ -43,43 +43,16 @@ function resetLabel(minutes){
   const left = [day && day+"일",hour && hour+"시간",min && min+"분"].filter(Boolean).join(" ");
   return left+" 후 초기화 · "+(end.getMonth()+1)+"/"+end.getDate()+" "+clock(minutes);
 }
-const faces = {
-  week: {label:"주간", radius:28, divisions:7},
-  short: {label:"5시간", radius:21.6, divisions:5},
-  fable: {label:"Fable 주간", radius:16, divisions:1}
-};
-
-function dialRing(key, value){
-  const {radius, divisions} = faces[key];
-  const percent = Math.max(0, Math.min(100, value));
-  if(divisions === 1){
-    const circle = '<circle cx="32" cy="32" r="'+radius+'" pathLength="100"';
-    return `<g class="dial-ring ${key}" transform="rotate(-90 32 32)">${circle} class="track"/>${circle} stroke-dasharray="${percent} 100"/></g>`;
-  }
-
-  // Each cell has its own background arc. Fractional cells keep their exact fill.
-  const step = Math.PI * 2 / divisions;
-  const gap = 2.6 / radius;
-  const point = angle => [32 + radius*Math.sin(angle), 32 - radius*Math.cos(angle)].join(" ");
-  let arcs = "";
-  for(let i=0; i<divisions; i++){
-    const start = point(step*i + gap/2);
-    const end = point(step*(i+1) - gap/2);
-    const path = `<path d="M ${start} A ${radius} ${radius} 0 0 1 ${end}" pathLength="100"`;
-    const filled = Math.min(100, Math.max(0, percent*divisions - i*100));
-    arcs += path + ' class="track"/>';
-    if(filled > 0) arcs += path + ' stroke-dasharray="'+filled+' 100"/>';
-  }
-  return '<g class="dial-ring '+key+'">'+arcs+'</g>';
-}
+const faces = { week: "주간", fable: "Fable 주간", short: "5시간" };
 
 function gauge(a){
   const windows = Object.keys(faces).filter(key => a[key] != null);
-  const label = windows.map(key=>faces[key].label+" "+used(a,key)+"%").join(", ");
+  const usage = Object.fromEntries(windows.map(key => [key, used(a,key)]));
+  const label = windows.map(key=>faces[key]+" "+usage[key]+"%").join(", ");
   const description = providers[a.provider]+" "+a.alias+" · "+a.email+" · 사용률 "+label;
-  const rings = windows.map(key=>dialRing(key,used(a,key))).join("");
+  const resets = { week: a.reset[1] / (7 * 1440), short: a.redeemed ? 1 : a.reset[0] / 300 };
   return `<button class="gauge-btn ${a.provider}" data-open="${a.id}" aria-expanded="${activeId===a.id}" aria-controls="panel" aria-label="${description}" title="${description}">
-    <span class="gauge"><svg viewBox="0 0 64 64" aria-hidden="true">${rings}</svg>${logo(a.provider)}</span><span class="account-name">${a.alias}</span></button>`;
+    <span class="gauge">${dialPreview(usage, a.provider, resets)}</span><span class="account-name">${a.alias}</span></button>`;
 }
 function drawGauges(){
   const study=[], tray=[];
@@ -103,7 +76,7 @@ function drawCards(){
   }).join("");
 }
 function limitRow(key, value, minutes){
-  return `<div class="quota ${key}"><div class="quota-head"><span>${faces[key].label} 한도</span><b>${value}% 사용</b></div><div class="meter"><i style="width:${value}%"></i></div><div class="meta">${resetLabel(minutes)}</div></div>`;
+  return `<div class="quota ${key}"><div class="quota-head"><span>${faces[key]} 한도</span><b>${value}% 사용</b></div><div class="meter"><i style="width:${value}%"></i></div><div class="meta">${resetLabel(minutes)}</div></div>`;
 }
 function limits(a){
   const count=a.tickets===null?null:a.tickets-Number(a.redeemed);
@@ -111,8 +84,8 @@ function limits(a){
   if(count!==null) creditNote=count ? "만료 "+a.expires : "사용 가능한 리셋권이 없습니다.";
   const canUse=count>0 && used(a,"short")>0;
   return limitRow("week",used(a,"week"),a.reset[1])+
-    limitRow("short",used(a,"short"),a.redeemed?300:a.reset[0])+
     (a.fable != null ? limitRow("fable",used(a,"fable"),a.reset[1]) : "")+
+    limitRow("short",used(a,"short"),a.redeemed?300:a.reset[0])+
     `<div class="ticket"><span>리셋권</span><div><b>${count===null?"정보 없음":count+"장"}</b>${canUse?'<button class="action" id="redeem" title="예시 리셋권 1장으로 5시간 한도 초기화">5시간 리셋 체험</button>':""}</div></div>
     <p class="feedback">${creditNote}${a.redeemed?" · 5시간 리셋 체험 완료":""}</p>`;
 }

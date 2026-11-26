@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quota · 작업표시줄 미리보기</title>
 <link rel="stylesheet" href="preview.css">
+<script src="dial-preview.js" defer></script>
 <script src="preview.js" defer></script>
 </head>
 <body>
@@ -12,7 +13,7 @@
 <main>
 <div class="heading"><div><h1>작업표시줄 미리보기</h1><p>작업표시줄의 고리와 상세 패널의 막대는 사용한 만큼 차오릅니다.</p></div></div>
 <section class="stage" aria-label="작업표시줄과 계정 상세">
-<div class="scene"><div class="canvas"><div class="canvashead"><span>게이지 확대</span><button id="theme" aria-pressed="false">밝은 배경</button></div><div class="study" id="study"></div><div class="legend" aria-label="고리 범례"><span class="week">주간 · 7칸</span><span class="short">5시간 · 5칸</span><span class="fable">Fable · 연속</span></div><div class="dimension" id="dim"></div></div>
+<div class="scene"><div class="canvas"><div class="canvashead"><span>게이지 확대</span><button id="theme" aria-pressed="false">밝은 배경</button></div><div class="study" id="study"></div><div class="legend" aria-label="고리 범례"><span class="week">주간 · 7칸</span><span class="fable">Fable · 주간 7칸</span><span class="short">5시간 · 5칸</span><span class="reset">빨간 바늘 · 리셋</span></div><div class="dimension" id="dim"></div></div>
 <aside id="panel" aria-labelledby="account-title" hidden></aside></div>
 <div class="taskbar"><div class="barleft"><i class="windows" aria-hidden="true"></i><span>실제 크기 · 1×</span></div><div class="tray"><div id="actual"></div><span aria-hidden="true">⌃</span><time>10:24<br>11.26</time></div></div>
 </section>

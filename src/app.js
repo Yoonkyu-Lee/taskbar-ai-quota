@@ -152,8 +152,8 @@ function detail(a) {
     credits = s.credits;
   const quotas =
     limit("주간 한도", "week", s.week) +
-    limit("5시간 한도", "short", s.short) +
-    limit("Fable 주간 한도", "fable", s.fable);
+    limit("Fable 주간 한도", "fable", s.fable) +
+    limit("5시간 한도", "short", s.short);
   $("#detail").innerHTML =
     '<div class="tabs"><button data-tab="limits">할당량</button><button data-tab="history">사용 이력</button></div><div class="pages"><section data-page="limits">' +
     (quotas || '<p class="empty">확인된 한도가 없습니다.</p>') +

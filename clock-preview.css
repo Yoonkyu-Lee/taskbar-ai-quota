@@ -34,6 +34,13 @@ th:first-child, td:first-child { text-align: left; }
 td { border-top: 1px solid #394547; }
 td i { display: inline-block; width: 8px; height: 8px; margin-right: 7px; background: var(--ink); border-radius: 50%; }
 .week { --ink: var(--week); } .short { --ink: var(--short); } .fable { --ink: var(--fable); }
+.dial-ring { fill: none; stroke: var(--ink); --dial-track: #55516c; }
+.dial-ring.fable { --dial-track: #654b3d; }
+.dial-ring.short { --dial-track: #384b4d; }
+.dial-ring .track { stroke: var(--dial-track); }
+.dial-logo { filter: brightness(0) invert(95%); }
+.hand-fill { fill: #ff4848; }
+.hand-gap { fill: #182125; }
 .bar { min-height: 48px; background: #141b1e; border-top: 1px solid #485355; padding: 0 16px; display: flex; align-items: center; gap: 13px; }
 .bar-label { font-size: 11px; color: #a8b3b0; margin-right: auto; white-space: nowrap; }
 .bar-label strong { color: #e7ece9; font-size: 11px; margin-left: 5px; }
@@ -63,7 +70,8 @@ h2 { font-size: 15px; letter-spacing: -.025em; }
 .steps button { background: #fcfdfb; color: #2b3c32; border: 1px solid #ccd6cd; padding: 3px 9px; border-radius: 5px; font-size: 12px; }
 #elapsed { margin-left: 6px; font-size: 11px; color: #506157; }
 .slider { display: grid; align-items: center; grid-template-columns: 37px 1fr 38px; gap: 10px; font-size: 12px; margin-top: 8px; }
-.slider input { width: 100%; accent-color: #665399; } #short { accent-color: #24796f; }
+.slider[hidden] { display: none; }
+.slider input { width: 100%; accent-color: #665399; } #fable { accent-color: #9a5717; } #short { accent-color: #24796f; }
 .slider output { text-align: right; font-variant-numeric: tabular-nums; }
 @media(max-width:680px) {
   .mast, main { width: calc(100% - 28px); } .mast { height: 50px; } main { padding-top: 21px; }

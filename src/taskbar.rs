@@ -1,4 +1,4 @@
-use crate::model::{HostAction, Provider, Tile};
+use crate::model::{HostAction, Limit, Provider, Tile};
 use std::{
     cell::RefCell,
     f32::consts::{PI, TAU},
@@ -163,7 +163,7 @@ impl State {
                 } else {
                     "GPT"
                 };
-                let status = if !has_quota(tile) {
+                let status = if !Gauge::new(tile).has_quota() {
                     " · 정보 없음"
                 } else if tile.stale {
                     " · 이전 데이터"
@@ -1134,11 +1134,10 @@ fn clock_needs_redraw(tiles: &[Tile], painted: i64, now: i64) -> bool {
     }
     let minute_changed = painted.div_euclid(60) != now.div_euclid(60);
     tiles.iter().any(|tile| {
-        [&tile.week, &tile.short]
+        let gauge = Gauge::new(tile);
+        [gauge.weekly_reset(), gauge.short_reset()]
             .into_iter()
             .flatten()
-            .filter(|limit| limit.remaining.is_finite())
-            .filter_map(|limit| limit.resets_at)
             .any(|deadline| {
                 (now < deadline) != (painted < deadline) || (now < deadline && minute_changed)
             })
@@ -1169,15 +1168,77 @@ const CLAUDE_MASK: &[u8; 4096] = include_bytes!("taskbar_claude.alpha");
 const GPT_MASK: &[u8; 4096] = include_bytes!("taskbar_openai.alpha");
 const OUTER_RADIUS: f32 = 19.5;
 const RING_WIDTH: f32 = 4.;
-const FABLE_WIDTH: f32 = 3.;
 const WEEK_SECONDS: i64 = 7 * 24 * 60 * 60;
 const SHORT_SECONDS: i64 = 5 * 60 * 60;
 
-fn has_quota(tile: &Tile) -> bool {
-    [&tile.week, &tile.short, &tile.fable]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ring {
+    Week,
+    Fable,
+    Short,
+}
+
+impl Ring {
+    fn divisions(self) -> u8 {
+        match self {
+            Self::Week | Self::Fable => 7,
+            Self::Short => 5,
+        }
+    }
+}
+
+struct Gauge<'a> {
+    week: Option<&'a Limit>,
+    fable: Option<&'a Limit>,
+    short: Option<&'a Limit>,
+}
+
+impl<'a> Gauge<'a> {
+    fn new(tile: &'a Tile) -> Self {
+        let valid = |limit: &&Limit| limit.remaining.is_finite();
+        Self {
+            week: tile.week.as_ref().filter(valid),
+            fable: tile.fable.as_ref().filter(valid),
+            short: tile.short.as_ref().filter(valid),
+        }
+    }
+
+    fn weekly_reset(&self) -> Option<i64> {
+        self.week
+            .and_then(|limit| limit.resets_at)
+            .or_else(|| self.fable.and_then(|limit| limit.resets_at))
+    }
+
+    fn short_reset(&self) -> Option<i64> {
+        self.short.and_then(|limit| limit.resets_at)
+    }
+
+    fn has_quota(&self) -> bool {
+        self.week.is_some() || self.fable.is_some() || self.short.is_some()
+    }
+
+    fn weekly_inner_edge(&self) -> f32 {
+        let bands = u8::from(self.week.is_some()) + u8::from(self.fable.is_some());
+        OUTER_RADIUS - f32::from(bands) * RING_WIDTH
+    }
+
+    fn rings(&self) -> impl Iterator<Item = (Ring, &Limit, f32)> {
+        [
+            (Ring::Week, self.week),
+            (Ring::Fable, self.fable),
+            (Ring::Short, self.short),
+        ]
         .into_iter()
-        .flatten()
-        .any(|limit| limit.remaining.is_finite())
+        .filter_map(|(ring, limit)| limit.map(|limit| (ring, limit)))
+        .enumerate()
+        .map(|(index, (ring, limit))| {
+            (
+                ring,
+                limit,
+                OUTER_RADIUS - (index as f32 + 0.5) * RING_WIDTH,
+            )
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1189,7 +1250,7 @@ struct Arc {
 
 fn arcs(divisions: u8, remaining: f64) -> impl Iterator<Item = Arc> {
     let step = TAU / f32::from(divisions);
-    let gap = if divisions == 1 { 0. } else { 0.011 * TAU };
+    let gap = 0.011 * TAU;
     let used = if remaining.is_finite() {
         (1. - remaining.clamp(0., 100.) / 100.) as f32
     } else {
@@ -1375,64 +1436,35 @@ impl Renderer {
                         x + TILE_PAD as f32 + DIAL_SIZE as f32 / 2.,
                         HEIGHT as f32 / 2.,
                     );
-                    let known = has_quota(tile);
-                    let mut outer_edge = OUTER_RADIUS;
-                    for (limit, stroke, divisions, active, track, window) in [
-                        (
-                            tile.week.as_ref(),
-                            RING_WIDTH,
-                            7,
-                            palette.week,
-                            palette.track,
-                            Some(WEEK_SECONDS),
-                        ),
-                        (
-                            tile.short.as_ref(),
-                            RING_WIDTH,
-                            5,
-                            palette.short,
-                            palette.short_track,
-                            Some(SHORT_SECONDS),
-                        ),
-                        (
-                            tile.fable.as_ref(),
-                            FABLE_WIDTH,
-                            1,
-                            palette.fable,
-                            palette.track,
-                            None,
-                        ),
-                    ] {
-                        let Some(limit) = limit.filter(|limit| limit.remaining.is_finite()) else {
-                            continue;
+                    let gauge = Gauge::new(tile);
+                    let known = gauge.has_quota();
+                    for (ring, limit, radius) in gauge.rings() {
+                        let (active, track) = match ring {
+                            Ring::Week => (&palette.week, &palette.week_track),
+                            Ring::Fable => (&palette.fable, &palette.fable_track),
+                            Ring::Short => (&palette.short, &palette.short_track),
                         };
-                        let radius = outer_edge - stroke / 2.;
-                        outer_edge -= stroke;
-                        for arc in arcs(divisions, limit.remaining) {
-                            brush.SetColor(&track);
+                        for arc in arcs(ring.divisions(), limit.remaining) {
+                            brush.SetColor(track);
                             self.arc(
                                 target,
                                 &brush,
                                 center,
-                                (radius, stroke),
+                                (radius, RING_WIDTH),
                                 arc.start,
                                 arc.span,
                             )?;
                             if arc.filled > 0. {
-                                brush.SetColor(&active);
+                                brush.SetColor(active);
                                 self.arc(
                                     target,
                                     &brush,
                                     center,
-                                    (radius, stroke),
+                                    (radius, RING_WIDTH),
                                     arc.start,
                                     arc.filled,
                                 )?;
                             }
-                        }
-                        if let Some(hand) = window.and_then(|w| reset_hand(limit.resets_at, now, w))
-                        {
-                            draw_reset_hand(target, &brush, &palette, center, radius, hand);
                         }
                     }
                     if !known {
@@ -1446,11 +1478,11 @@ impl Renderer {
                             TAU,
                         )?;
                     }
-                    let has_fable = tile
-                        .fable
-                        .as_ref()
-                        .is_some_and(|limit| limit.remaining.is_finite());
-                    let logo_radius = if has_fable { 27. / 4. } else { 33. / 4. };
+                    let logo_radius = if gauge.rings().count() == 3 {
+                        27. / 4.
+                    } else {
+                        33. / 4.
+                    };
                     let logo_bounds = draw_rect(
                         center.0 - logo_radius,
                         center.1 - logo_radius,
@@ -1469,6 +1501,23 @@ impl Renderer {
                         D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
                         None,
                     );
+                    let weekly_inner = gauge.weekly_inner_edge();
+                    for (reset, window, edges) in [
+                        (
+                            gauge.weekly_reset(),
+                            WEEK_SECONDS,
+                            (weekly_inner, OUTER_RADIUS),
+                        ),
+                        (
+                            gauge.short_reset(),
+                            SHORT_SECONDS,
+                            (weekly_inner - RING_WIDTH, weekly_inner),
+                        ),
+                    ] {
+                        if let Some(hand) = reset_hand(reset, now, window) {
+                            self.draw_reset_hand(target, &brush, &palette, center, edges, hand)?;
+                        }
+                    }
                     let label_left = x + (TILE_PAD + DIAL_SIZE + LABEL_GAP) as f32;
                     let label_right = x + width - TILE_PAD as f32;
                     if label_right > label_left {
@@ -1596,34 +1645,59 @@ impl Renderer {
         }
         Ok(())
     }
-}
 
-fn draw_reset_hand(
-    target: &ID2D1DCRenderTarget,
-    brush: &ID2D1SolidColorBrush,
-    palette: &Palette,
-    center: (f32, f32),
-    radius: f32,
-    hand: ResetHand,
-) {
-    let (sin, cos) = hand.angle.sin_cos();
-    let point = |offset| {
-        let mut point = D2D1_ELLIPSE::default().point;
-        point.X = center.0 + (radius + offset) * sin;
-        point.Y = center.1 - (radius + offset) * cos;
-        point
-    };
-    let inner = -1.8;
-    let outer = 2.;
-    unsafe {
-        brush.SetColor(&palette.hand_outline);
-        target.DrawLine(point(inner), point(outer), brush, 3., None);
-        brush.SetColor(&palette.hand);
+    fn draw_reset_hand(
+        &self,
+        target: &ID2D1DCRenderTarget,
+        brush: &ID2D1SolidColorBrush,
+        palette: &Palette,
+        center: (f32, f32),
+        edges: (f32, f32),
+        hand: ResetHand,
+    ) -> WinResult<()> {
+        let (inner, outer) = edges;
+        let section = |inner, outer, ink| -> WinResult<()> {
+            // Curve each end along its band edge while keeping the sides one band-width apart.
+            let point = |radius: f32, side: f32| {
+                let angle = hand.angle + (side * RING_WIDTH / (2. * radius)).asin();
+                let mut point = D2D1_ELLIPSE::default().point;
+                point.X = center.0 + radius * angle.sin();
+                point.Y = center.1 - radius * angle.cos();
+                point
+            };
+            let cap = |radius, side, sweep| D2D1_ARC_SEGMENT {
+                point: point(radius, side),
+                size: D2D_SIZE_F {
+                    width: radius,
+                    height: radius,
+                },
+                rotationAngle: 0.,
+                sweepDirection: sweep,
+                arcSize: D2D1_ARC_SIZE_SMALL,
+            };
+            unsafe {
+                let path = self.factory.CreatePathGeometry()?;
+                let sink = path.Open()?;
+                sink.BeginFigure(point(inner, -1.), D2D1_FIGURE_BEGIN_FILLED);
+                sink.AddLine(point(outer, -1.));
+                sink.AddArc(&cap(outer, 1., D2D1_SWEEP_DIRECTION_CLOCKWISE));
+                sink.AddLine(point(inner, 1.));
+                sink.AddArc(&cap(inner, -1., D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE));
+                sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+                sink.Close()?;
+                brush.SetColor(ink);
+                target.FillGeometry(&path, brush, None);
+            }
+            Ok(())
+        };
         if hand.expired {
-            target.DrawLine(point(inner), point(inner + 1.4), brush, 1.8, None);
-            target.DrawLine(point(outer - 1.4), point(outer), brush, 1.8, None);
+            let dash = (outer - inner) / 3.;
+            section(inner, outer, &palette.hand_gap)?;
+            section(inner, inner + dash, &palette.hand)?;
+            section(outer - dash, outer, &palette.hand)?;
+            Ok(())
         } else {
-            target.DrawLine(point(inner), point(outer), brush, 1.8, None);
+            section(inner, outer, &palette.hand)
         }
     }
 }
@@ -1682,6 +1756,8 @@ struct Palette {
     paper: D2D1_COLOR_F,
     hover: D2D1_COLOR_F,
     track: D2D1_COLOR_F,
+    week_track: D2D1_COLOR_F,
+    fable_track: D2D1_COLOR_F,
     short_track: D2D1_COLOR_F,
     label: D2D1_COLOR_F,
     line: D2D1_COLOR_F,
@@ -1689,28 +1765,30 @@ struct Palette {
     short: D2D1_COLOR_F,
     fable: D2D1_COLOR_F,
     hand: D2D1_COLOR_F,
-    hand_outline: D2D1_COLOR_F,
+    hand_gap: D2D1_COLOR_F,
     logo: u32,
 }
 
 impl Palette {
     fn new(light: bool) -> Self {
-        let (paper, hover, track, label, line, week, short, fable, hand, hand_outline, logo) =
-            if light {
-                (
-                    0xf1f3ef, 0xe0e8e4, 0xcdd8d0, 0x324740, 0xc1ccc6, 0x6750ac, 0x00766e, 0x9a5717,
-                    0xbd1d29, 0xf1f3ef, 0x324740,
-                )
-            } else {
-                (
-                    0x141b1e, 0x303a3c, 0x505e62, 0xf0f3f1, 0x485355, 0xb9a5ff, 0x65ddd1, 0xffb784,
-                    0xff4848, 0x182125, 0xf2f2f2,
-                )
-            };
+        let (paper, hover, track, label, line, week, short, fable, hand, hand_gap, logo) = if light
+        {
+            (
+                0xf1f3ef, 0xe0e8e4, 0xcdd8d0, 0x324740, 0xc1ccc6, 0x6750ac, 0x00766e, 0x9a5717,
+                0xbd1d29, 0xf1f3ef, 0x324740,
+            )
+        } else {
+            (
+                0x141b1e, 0x303a3c, 0x505e62, 0xf0f3f1, 0x485355, 0xb9a5ff, 0x65ddd1, 0xffb784,
+                0xff4848, 0x182125, 0xf2f2f2,
+            )
+        };
         Self {
             paper: color(paper, 0.92),
             hover: color(hover, 1.),
             track: color(track, 1.),
+            week_track: color(if light { 0xccc4dd } else { 0x55516c }, 1.),
+            fable_track: color(if light { 0xe3c8b6 } else { 0x654b3d }, 1.),
             short_track: color(if light { 0xafc6be } else { 0x384b4d }, 1.),
             label: color(label, 1.),
             line: color(line, 1.),
@@ -1718,7 +1796,7 @@ impl Palette {
             short: color(short, 1.),
             fable: color(fable, 1.),
             hand: color(hand, 1.),
-            hand_outline: color(hand_outline, 1.),
+            hand_gap: color(hand_gap, 1.),
             logo,
         }
     }
@@ -2001,13 +2079,67 @@ mod tests {
     }
 
     #[test]
-    fn continuous_fable_ring_starts_at_noon() {
-        for remaining in [0., 31.5, 100.] {
-            let arc = arcs(1, remaining).next().unwrap();
-            assert_eq!(arc.start, 0.);
-            assert_eq!(arc.span, TAU);
-            assert!((arc.filled / TAU - (1. - remaining as f32 / 100.)).abs() < 0.00001);
-        }
+    fn weekly_and_fable_bands_align_and_missing_roles_pack() {
+        let mut sample = tiles(&[Provider::Claude]);
+        let tile = &mut sample[0];
+        let limit = |remaining| {
+            Some(Limit {
+                remaining,
+                resets_at: None,
+            })
+        };
+        tile.week = limit(55.);
+        tile.fable = limit(42.);
+        tile.short = limit(25.);
+        let bands = |tile: &Tile| {
+            Gauge::new(tile)
+                .rings()
+                .map(|(ring, _, radius)| (ring, radius))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            bands(tile),
+            [(Ring::Week, 17.5), (Ring::Fable, 13.5), (Ring::Short, 9.5)]
+        );
+        assert_eq!(Gauge::new(tile).weekly_inner_edge(), 11.5);
+        let angles = |ring: Ring| {
+            arcs(ring.divisions(), 50.)
+                .map(|arc| (arc.start, arc.span))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(angles(Ring::Week), angles(Ring::Fable));
+
+        tile.fable = None;
+        assert_eq!(bands(tile), [(Ring::Week, 17.5), (Ring::Short, 13.5)]);
+        assert_eq!(Gauge::new(tile).weekly_inner_edge(), 15.5);
+        tile.week = None;
+        assert_eq!(bands(tile), [(Ring::Short, 17.5)]);
+        assert_eq!(Gauge::new(tile).weekly_inner_edge(), OUTER_RADIUS);
+        tile.fable = limit(42.);
+        assert_eq!(bands(tile), [(Ring::Fable, 17.5), (Ring::Short, 13.5)]);
+    }
+
+    #[test]
+    fn weekly_hand_prefers_week_reset_and_redraws_for_a_fable_fallback() {
+        let mut sample = tiles(&[Provider::Claude]);
+        sample[0].fable = Some(Limit {
+            remaining: 60.,
+            resets_at: Some(128),
+        });
+        assert_eq!(Gauge::new(&sample[0]).weekly_reset(), Some(128));
+        assert!(clock_needs_redraw(&sample, 119, 120));
+        assert!(clock_needs_redraw(&sample, 120, 128));
+        assert!(!clock_needs_redraw(&sample, 128, 180));
+
+        sample[0].week = Some(Limit {
+            remaining: 50.,
+            resets_at: Some(130),
+        });
+        assert_eq!(Gauge::new(&sample[0]).weekly_reset(), Some(130));
+        assert!(!clock_needs_redraw(&sample, 120, 128));
+        assert!(clock_needs_redraw(&sample, 128, 130));
+        sample[0].week.as_mut().unwrap().resets_at = None;
+        assert_eq!(Gauge::new(&sample[0]).weekly_reset(), Some(128));
     }
 
     #[test]

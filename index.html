@@ -10,12 +10,12 @@
 <body>
   <header class="mast"><span class="wordmark"><i aria-hidden="true"></i>Quota</span><a href="account-preview.html">이전 계정 상세 시안 ↗</a></header>
   <main>
-    <header class="intro"><h1>작업표시줄 리셋 시계</h1><p>고리의 길이는 남은 할당량을, 타이머는 다음 리셋까지의 시간을 보여줍니다.</p></header>
+    <header class="intro"><h1>작업표시줄 리셋 시계</h1><p>사용할수록 고리가 12시부터 시계 방향으로 차오릅니다. 빨간 바늘은 다음 리셋까지 남은 시간을 가리킵니다.</p></header>
     <section class="board" aria-label="게이지 미리보기">
       <div class="canvas">
         <div class="zoom"><div class="cap">게이지 확대 <span>3×</span></div><div id="zoom"></div></div>
         <div class="readout"><div class="cap"><span id="who"></span><span>예시 데이터</span></div>
-          <table><thead><tr><th>한도</th><th>잔여량</th><th>리셋까지</th></tr></thead><tbody id="readings"></tbody></table>
+          <table><thead><tr><th>한도</th><th>사용량</th><th>리셋까지</th></tr></thead><tbody id="readings"></tbody></table>
         </div>
       </div>
       <div class="bar"><span class="bar-label">작업표시줄 <strong>1×</strong></span><div id="strip" aria-label="미리 볼 계정"></div><div class="system-clock"><span id="clock"></span><span id="date"></span></div></div>
@@ -25,8 +25,8 @@
       <button class="option" data-mode="scale" aria-pressed="false"><span class="radio"></span><span><strong>별칭 아래 시간 눈금</strong><small>보라색 7칸은 하루씩, 청록색 5칸은 한 시간씩 꺼집니다.</small></span><span class="sample-tile" aria-hidden="true"></span></button>
     </section>
     <section class="controls" aria-label="시안 조작">
-      <div class="experiment"><h2>시간을 앞당겨 보기</h2><p>할당량을 고정하고 두 타이머의 움직임을 비교하세요.</p><div class="steps"><button data-step="60">+1시간</button><button data-step="1440">+1일</button><button id="rewind" disabled>처음으로</button></div><output id="elapsed" aria-live="polite"></output></div>
-      <div class="sliders"><h2>남은 할당량 바꿔 보기</h2><div class="slider"><label for="week">주간</label><input id="week" type="range" min="0" max="100"><output for="week" id="week-value"></output></div><div class="slider"><label for="short">5시간</label><input id="short" type="range" min="0" max="100"><output for="short" id="short-value"></output></div></div>
+      <div class="experiment"><h2>시간을 앞당겨 보기</h2><p>사용량을 고정하고 두 타이머의 움직임을 비교하세요.</p><div class="steps"><button data-step="60">+1시간</button><button data-step="1440">+1일</button><button id="rewind" disabled>처음으로</button></div><output id="elapsed" aria-live="polite"></output></div>
+      <div class="sliders"><h2>사용량 바꿔 보기</h2><div class="slider"><label for="week">주간</label><input id="week" type="range" min="0" max="100"><output for="week" id="week-value"></output></div><div class="slider"><label for="short">5시간</label><input id="short" type="range" min="0" max="100"><output for="short" id="short-value"></output></div></div>
     </section>
   </main>
 </body>

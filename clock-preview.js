@@ -1,9 +1,9 @@
 "use strict";
 
 const accounts = [
-  { provider: "Claude", alias: "개인", week: 64, short: 78, fable: 41, weekReset: 4 * 1440 + 360, shortReset: 135 },
-  { provider: "GPT", alias: "Plus", week: 30, short: 86, weekReset: 1440 + 180, shortReset: 45 },
-  { provider: "GPT", alias: "Pro 200", week: 92, short: 38, weekReset: 6 * 1440 + 720, shortReset: 255 },
+  { provider: "Claude", alias: "개인", used: { week: 36, short: 22, fable: 59 }, weekReset: 4 * 1440 + 360, shortReset: 135 },
+  { provider: "GPT", alias: "Plus", used: { week: 70, short: 14 }, weekReset: 1440 + 180, shortReset: 45 },
+  { provider: "GPT", alias: "Pro 200", used: { week: 8, short: 62 }, weekReset: 6 * 1440 + 720, shortReset: 255 },
 ];
 const rings = {
   week: { name: "주간", color: "#b9a5ff", radius: 35, cells: 7, minutes: 7 * 1440 },
@@ -42,7 +42,7 @@ function point(radius, fraction) {
 }
 function ring(a, key) {
   const { radius, cells, color } = rings[key];
-  const value = a[key] / 100;
+  const value = a.used[key] / 100;
   const stroke = key === "fable" ? 3 : 5.2;
   const track = "#505e62";
   if (cells === 1) {
@@ -71,8 +71,8 @@ function hand(a, key) {
 }
 function tile(a, style = mode) {
   const logo = a.provider === "Claude" ? "claude" : "openai";
-  const size = a.fable == null ? 33 : 27;
-  const dial = Object.keys(rings).filter(k => a[k] != null).map(k => ring(a, k)).join("");
+  const size = a.used.fable == null ? 33 : 27;
+  const dial = Object.keys(a.used).map(k => ring(a, k)).join("");
   return '<span class="tile" data-mode="' + style + '"><svg class="dial" viewBox="0 0 80 80" aria-hidden="true">' + dial +
     '<image href="' + logo + '.svg" x="' + (80 - size) / 2 + '" y="' + (80 - size) / 2 + '" width="' + size + '" height="' + size + '" style="filter:brightness(0) invert(95%)"/>' +
     (style === "hands" ? hand(a, "week") + hand(a, "short") : "") + '</svg><span class="side"><span class="alias">' + a.alias + '</span>' +
@@ -83,14 +83,14 @@ function draw() {
   const a = accounts[selected];
   $("#zoom").innerHTML = tile(a);
   $("#who").textContent = a.provider + " · " + a.alias;
-  $("#readings").innerHTML = Object.keys(rings).filter(k => a[k] != null).map(key =>
-    '<tr><td><i class="' + key + '"></i>' + rings[key].name + '</td><td>' + a[key] + '%</td><td>' +
+  $("#readings").innerHTML = Object.keys(a.used).map(key =>
+    '<tr><td><i class="' + key + '"></i>' + rings[key].name + '</td><td>' + a.used[key] + '%</td><td>' +
     duration((key === "short" ? a.shortReset : a.weekReset) - elapsed) + '</td></tr>'
   ).join("");
   document.querySelectorAll("#strip button").forEach((b, i) => {
     b.setAttribute("aria-pressed", String(i === selected));
     const item = accounts[i];
-    b.title = ["week", "short"].map(k => rings[k].name + " " + item[k] + "% · " + duration(item[k + "Reset"] - elapsed)).join("\n");
+    b.title = ["week", "short"].map(k => rings[k].name + " " + item.used[k] + "% 사용 · " + duration(item[k + "Reset"] - elapsed)).join("\n");
     b.innerHTML = tile(item);
   });
   document.querySelectorAll(".option").forEach(b => {
@@ -101,8 +101,8 @@ function draw() {
   $("#clock").textContent = now.toTimeString().slice(0, 5);
   $("#date").textContent = (now.getMonth() + 1) + "." + now.getDate();
   for (const key of ["week", "short"]) {
-    $("#" + key).value = a[key];
-    $("#" + key + "-value").textContent = a[key] + "%";
+    $("#" + key).value = a.used[key];
+    $("#" + key + "-value").textContent = a.used[key] + "%";
   }
   $("#rewind").disabled = elapsed === 0;
   $("#elapsed").textContent = elapsed > 0 ? duration(elapsed) + " 경과" : "";
@@ -117,7 +117,7 @@ document.querySelectorAll(".option").forEach(b => b.onclick = () => { mode = b.d
 document.querySelectorAll("[data-step]").forEach(b => b.onclick = () => { advance += Number(b.dataset.step); draw(); });
 $("#rewind").onclick = () => { advance = 0; startedAt = Date.now(); draw(); };
 for (const key of ["week", "short"]) {
-  $("#" + key).oninput = (e) => { accounts[selected][key] = Number(e.target.value); draw(); };
+  $("#" + key).oninput = (e) => { accounts[selected].used[key] = Number(e.target.value); draw(); };
 }
 draw();
 setInterval(draw, 60000);

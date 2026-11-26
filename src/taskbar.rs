@@ -1168,6 +1168,7 @@ const CLAUDE_MASK: &[u8; 4096] = include_bytes!("taskbar_claude.alpha");
 const GPT_MASK: &[u8; 4096] = include_bytes!("taskbar_openai.alpha");
 const OUTER_RADIUS: f32 = 19.5;
 const RING_WIDTH: f32 = 4.;
+const HAND_WIDTH: f32 = 2.;
 const WEEK_SECONDS: i64 = 7 * 24 * 60 * 60;
 const SHORT_SECONDS: i64 = 5 * 60 * 60;
 
@@ -1657,9 +1658,9 @@ impl Renderer {
     ) -> WinResult<()> {
         let (inner, outer) = edges;
         let section = |inner, outer, ink| -> WinResult<()> {
-            // Curve each end along its band edge while keeping the sides one band-width apart.
+            // Curve each end along its band edge while keeping the sides parallel.
             let point = |radius: f32, side: f32| {
-                let angle = hand.angle + (side * RING_WIDTH / (2. * radius)).asin();
+                let angle = hand.angle + (side * HAND_WIDTH / (2. * radius)).asin();
                 let mut point = D2D1_ELLIPSE::default().point;
                 point.X = center.0 + radius * angle.sin();
                 point.Y = center.1 - radius * angle.cos();

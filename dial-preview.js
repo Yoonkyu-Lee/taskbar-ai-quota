@@ -1,7 +1,7 @@
 "use strict";
 
 const dialBands = { week: 7, fable: 7, short: 5 };
-const dialOuterRadius = 39, dialStroke = 8;
+const dialOuterRadius = 39, dialStroke = 8, handWidth = 4;
 
 function dialBand(key, value, index) {
   const cells = dialBands[key];
@@ -24,12 +24,13 @@ function dialBand(key, value, index) {
 function dialHand(key, left, outer, inner) {
   if (!Number.isFinite(left)) return "";
   const angle = left === 0 ? 0 : (1 - left) * 360;
-  // Center the curved caps on the dial so the full-width hand stays within its bands.
+  // Center the curved caps on the dial so the hand stays within its bands.
   const cap = (o, i) => {
-    const half = dialStroke / 2;
+    const half = handWidth / 2;
+    const leftX = 40 - half, rightX = 40 + half;
     const top = 40 - Math.sqrt(o * o - half * half);
     const bottom = 40 - Math.sqrt(i * i - half * half);
-    return `M36 ${top} A${o} ${o} 0 0 1 44 ${top} L44 ${bottom} A${i} ${i} 0 0 0 36 ${bottom} Z`;
+    return `M${leftX} ${top} A${o} ${o} 0 0 1 ${rightX} ${top} L${rightX} ${bottom} A${i} ${i} 0 0 0 ${leftX} ${bottom} Z`;
   };
   const depth = (outer - inner) / 3;
   const shape = left === 0 ? cap(outer, outer - depth) + " " + cap(inner + depth, inner) : cap(outer, inner);

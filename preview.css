@@ -15,7 +15,7 @@ button{font:inherit;color:inherit;cursor:pointer}button:focus-visible{outline:2p
 .stage.light{--week:#6750ac;--short:#00766e;--fable:#9a5717;--reset:#bd1d29;--hand-gap:#f1f3ef;--week-track:#ccc4dd;--fable-track:#e3c8b6;--short-track:#afc6be}
 .week{--color:var(--week)}.short{--color:var(--short)}.fable{--color:var(--fable)}
 .reset{--color:var(--reset)}
-.dial-ring{fill:none;stroke:var(--color);--dial-track:var(--week-track)}.dial-ring.fable{--dial-track:var(--fable-track)}.dial-ring.short{--dial-track:var(--short-track)}.dial-ring .track{stroke:var(--dial-track)}
+.dial-ring{fill:none;stroke:var(--color);--dial-track:var(--week-track)}.dial-ring.fable{--dial-track:var(--fable-track)}.dial-ring.short{--dial-track:var(--short-track)}.dial-ring .track{stroke:var(--dial-track)}.dial-ring .tick{stroke:#fff}
 .dial-logo{filter:brightness(0) invert(95%)}.light .dial-logo{filter:brightness(0)}.hand-fill{fill:var(--reset)}.hand-gap{fill:var(--hand-gap)}
 .legend{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 18px;margin-top:24px}
 .legend span{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}

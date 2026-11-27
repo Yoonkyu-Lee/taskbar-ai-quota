@@ -2,6 +2,8 @@
 
 const dialBands = { week: 7, fable: 7, short: 5 };
 const dialOuterRadius = 39, dialStroke = 8, handWidth = 4;
+// The preview draws at twice the native 40 DIP dial, so 0.3 DIP becomes 0.6 units.
+const tickOverlap = 0.6;
 
 function dialBand(key, value, outer, stroke) {
   const cells = dialBands[key];
@@ -18,7 +20,13 @@ function dialBand(key, value, outer, stroke) {
     return `<path ${attrs} class="track"/>` +
       (fill > 0 ? `<path ${attrs} class="used" stroke-dasharray="${fill} 100"/>` : "");
   }).join("");
-  return `<g class="dial-ring ${key}">${paths}</g>`;
+  // White ticks fill each gap and reach 0.3 DIP into both cells, as in the native renderer.
+  const half = gap / 2 + tickOverlap / (2 * Math.PI * radius);
+  const ticks = Array.from({ length: cells }, (_, i) => {
+    const start = point(i / cells - half), end = point(i / cells + half);
+    return `<path class="tick" d="M${start.join(" ")} A${radius} ${radius} 0 0 1 ${end.join(" ")}" stroke-width="${stroke}"/>`;
+  }).join("");
+  return `<g class="dial-ring ${key}">${paths}${ticks}</g>`;
 }
 
 function dialHand(key, left, outer, inner) {

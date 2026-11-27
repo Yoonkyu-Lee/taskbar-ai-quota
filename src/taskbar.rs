@@ -1185,6 +1185,10 @@ const GPT_MASK: &[u8; 4096] = include_bytes!("taskbar_openai.alpha");
 const OUTER_RADIUS: f32 = 19.5;
 const RING_WIDTH: f32 = 4.;
 const HAND_WIDTH: f32 = 2.;
+const SEGMENT_GAP: f32 = 0.011 * TAU;
+// White ticks reach this far (DIP) into each neighbouring cell, so the background
+// cannot show through where their anti-aliased edges meet the cells.
+const TICK_OVERLAP: f32 = 0.3;
 const WEEK_SECONDS: i64 = 7 * 24 * 60 * 60;
 const SHORT_SECONDS: i64 = 5 * 60 * 60;
 
@@ -1280,7 +1284,7 @@ struct Arc {
 
 fn arcs(divisions: u8, remaining: f64) -> impl Iterator<Item = Arc> {
     let step = TAU / f32::from(divisions);
-    let gap = 0.011 * TAU;
+    let gap = SEGMENT_GAP;
     let used = if remaining.is_finite() {
         (1. - remaining.clamp(0., 100.) / 100.) as f32
     } else {
@@ -1291,6 +1295,13 @@ fn arcs(divisions: u8, remaining: f64) -> impl Iterator<Item = Arc> {
         span: step - gap,
         filled: (step - gap) * (used * f32::from(divisions) - f32::from(index)).clamp(0., 1.),
     })
+}
+
+/// White tick arcs `(start, span)`, one centred on each gap between cells.
+fn ticks(divisions: u8, radius: f32) -> impl Iterator<Item = (f32, f32)> {
+    let step = TAU / f32::from(divisions);
+    let span = SEGMENT_GAP + 2. * TICK_OVERLAP / radius;
+    (0..divisions).map(move |index| (step * f32::from(index) - span / 2., span))
 }
 
 #[derive(Debug, PartialEq)]
@@ -1481,6 +1492,10 @@ impl Renderer {
                                 brush.SetColor(active);
                                 self.arc(target, &brush, center, band, arc.start, arc.filled)?;
                             }
+                        }
+                        brush.SetColor(&palette.tick);
+                        for (start, span) in ticks(ring.divisions(), band.0) {
+                            self.arc(target, &brush, center, band, start, span)?;
                         }
                     }
                     if !known {
@@ -1771,6 +1786,7 @@ struct Palette {
     week_track: D2D1_COLOR_F,
     fable_track: D2D1_COLOR_F,
     short_track: D2D1_COLOR_F,
+    tick: D2D1_COLOR_F,
     label: D2D1_COLOR_F,
     line: D2D1_COLOR_F,
     week: D2D1_COLOR_F,
@@ -1802,6 +1818,7 @@ impl Palette {
             week_track: color(if light { 0xccc4dd } else { 0x55516c }, 1.),
             fable_track: color(if light { 0xe3c8b6 } else { 0x654b3d }, 1.),
             short_track: color(if light { 0xafc6be } else { 0x384b4d }, 1.),
+            tick: color(0xffffff, 1.),
             label: color(label, 1.),
             line: color(line, 1.),
             week: color(week, 1.),
@@ -2184,6 +2201,28 @@ mod tests {
             bands(tile),
             [(Ring::Fable, (17.5, 4.)), (Ring::Short, (13.5, 4.))]
         );
+    }
+
+    #[test]
+    fn white_ticks_cover_every_cell_gap_and_overlap_both_cells() {
+        for ring in [Ring::Week, Ring::Short] {
+            let divisions = ring.divisions();
+            let cells: Vec<_> = arcs(divisions, 50.).collect();
+            let radius = 13.5;
+            let marks: Vec<_> = ticks(divisions, radius).collect();
+            assert_eq!(marks.len(), usize::from(divisions));
+            let step = TAU / f32::from(divisions);
+            for (index, &(start, span)) in marks.iter().enumerate() {
+                let boundary = step * index as f32;
+                assert!((start + span / 2. - boundary).abs() < 1e-5);
+                let before = cells[(index + cells.len() - 1) % cells.len()];
+                let previous_end = (before.start + before.span) - if index == 0 { TAU } else { 0. };
+                let next_start = cells[index].start;
+                let reach = TICK_OVERLAP / radius;
+                assert!((previous_end - start - reach).abs() < 1e-5);
+                assert!((start + span - next_start - reach).abs() < 1e-5);
+            }
+        }
     }
 
     #[test]

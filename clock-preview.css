@@ -38,6 +38,7 @@ td i { display: inline-block; width: 8px; height: 8px; margin-right: 7px; backgr
 .dial-ring.fable { --dial-track: #654b3d; }
 .dial-ring.short { --dial-track: #384b4d; }
 .dial-ring .track { stroke: var(--dial-track); }
+.dial-ring .tick { stroke: #fff; }
 .dial-logo { filter: brightness(0) invert(95%); }
 .hand-fill { fill: #ff4848; }
 .hand-gap { fill: #182125; }
